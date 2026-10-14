@@ -1,0 +1,16 @@
+{
+  "_header": {
+    "system": "LABGUARD Key Store Template",
+    "version": "1.0",
+    "warning": "EXAMPLE TEMPLATE ONLY - DO NOT USE FOR AUTHENTICATION - INSECURE DUMMY KEY"
+  },
+  "keys": {
+    "KEY-EXAMPLE-001": {
+      "key_id": "KEY-EXAMPLE-001",
+      "algorithm": "HMAC-SHA256",
+      "key_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+      "created_at": "2026-01-01T00:00:00+00:00",
+      "description": "Explicitly labelled dummy key template for schema testing only"
+    }
+  }
+}

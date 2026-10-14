@@ -1,0 +1,27 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual Environments
+.venv/
+venv/
+ENV/
+
+# Local databases and uploads
+data/*.db
+data/*.db-wal
+data/*.db-shm
+uploads/
+
+# Environment files
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/

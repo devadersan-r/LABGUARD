@@ -1,0 +1,171 @@
+# MASTER PROMPT — LABGUARD COMPLETE FRONTEND + BACKEND INTEGRATION
+
+## ROLE AND OBJECTIVE
+
+Act as a senior full-stack engineer, Python/FastAPI architect, React/TypeScript engineer, embedded systems engineer, database engineer, and application security auditor.
+
+Your task is to **audit, integrate, debug, test, and complete my existing LABGUARD project** so that the frontend, backend, database, authentication, ESP32 serial communication, HMAC-SHA256 verification, evidence records, and dashboard work together as one application.
+
+Do not merely explain what I should do. Inspect the actual project files, identify the root causes of problems, implement appropriate fixes, run tests, and report verifiable results.
+
+Do not rewrite the entire project from scratch. Preserve existing working functionality and make targeted, maintainable changes.
+
+## 1. PROJECT CONTEXT
+
+Project name: **LABGUARD — Secure Access Portal**
+
+Purpose: A hardware-integrated telemetry and evidence-verification application that receives ESP32 measurements, verifies their cryptographic integrity, stores records, and presents the results through a web dashboard.
+
+My existing project contains, or is intended to contain, the following components:
+
+- Frontend: React, TypeScript/JavaScript, Vite, npm.
+- Backend: Python, FastAPI, Uvicorn.
+- Database: SQLite, SQLAlchemy, with WAL mode previously observed.
+- Serial communication: PySerial.
+- Hardware: ESP32 connected over USB serial.
+- Firmware/protocol: structured JSON Lines telemetry with the `labguard-v1` protocol.
+- Cryptography: HMAC-SHA256.
+- Authentication: login, logout, user/session validation, and protected API endpoints.
+- Dashboard: latest telemetry, statistics, status, charts, and integrity indicators.
+- Evidence: record inspection, verification, tamper detection, and session/record history.
+- Testing: pytest and existing frontend test/build tools, if configured.
+
+Previously used local addresses include:
+- Frontend: `http://localhost:3000` or a Vite development port such as `http://localhost:5173`.
+- Backend: `http://127.0.0.1:8000`.
+- API documentation: `http://127.0.0.1:8000/docs`.
+- ESP32 serial port previously identified as `COM9`, at `115200` baud.
+
+These are historical settings, not guaranteed current values. Inspect the repository, Vite configuration, environment variables, running processes, and serial-port discovery before choosing the correct values.
+
+The backend previously exposed endpoints including:
+
+- `GET /api/health`
+- `GET /api/system/info`
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `GET /api/auth/me`
+- `POST /api/auth/forgot-password`
+- `GET /api/serial/ports`
+- `GET /api/serial/status`
+- `POST /api/serial/connect`
+- `POST /api/serial/disconnect`
+- `POST /api/serial/simulator`
+- `GET /api/dashboard/latest`
+- `GET /api/dashboard/stats`
+- `POST /api/dashboard/scan`
+- Recording-session endpoints under `/api/sessions`
+- Evidence verification endpoints, including `/api/evidence/verify-record`
+- Tamper-status endpoints under `/api/tamper`
+
+Discover the actual registered routes in the current source code and OpenAPI schema. Do not assume every listed route is complete or behaves correctly.
+
+## 2. NON-NEGOTIABLE RULES
+
+1. Inspect the existing frontend, backend, firmware, configuration, database models, services, and tests before changing anything.
+2. Produce a concise audit of the current architecture and the root causes of known failures.
+3. Preserve working components. Do not delete and regenerate the project.
+4. Do not invent endpoints, database fields, authentication credentials, device capabilities, test results, or hardware functionality.
+5. Never claim that a feature works unless you have tested it or clearly label it as unverified.
+6. Never display simulated telemetry as real ESP32 sensor data.
+7. Keep the ESP32 protocol and frontend/backend data contracts consistent.
+8. Keep secret keys, passwords, tokens, and signing operations out of frontend code.
+9. Do not delete the existing SQLite database, existing records, evidence files, firmware keys, or user data to make tests pass.
+10. Do not disable authentication, HMAC verification, CORS security, or integrity checks merely to make the dashboard work.
+11. Do not replace real verification with hardcoded success messages or fabricated integrity percentages.
+12. Do not make broad dependency upgrades or change firmware pin assignments without a demonstrated need.
+13. Never expose secret values in terminal output, logs, screenshots, frontend bundles, API responses, or reports.
+14. Do not modify files outside the project unless explicitly necessary and explained.
+15. If an essential action requires my physical hardware, credentials, or approval, implement everything that can safely be implemented and clearly identify the remaining manual step.
+
+## 3. PHASE ONE — AUDIT THE ENTIRE PROJECT
+
+Inspect the actual directory tree and relevant source files.
+
+At minimum, investigate:
+
+### Frontend
+- `package.json` and lockfile.
+- `vite.config.ts` or equivalent.
+- Frontend environment files and `.env.example` files.
+- API client, fetch/Axios configuration, and proxy settings.
+- Login page and authentication context/hooks.
+- Routing and protected routes.
+- Dashboard components and charts.
+- Serial connection controls.
+- Simulator controls.
+- Record/session views.
+- Evidence verification and tamper-detection UI.
+- Type definitions and API response interfaces.
+- Error/loading/empty states.
+- Any hardcoded, mock, or simulated dashboard data.
+
+### Backend
+- `backend/app/main.py`
+- `backend/app/core/config.py`
+- `backend/app/core/security.py`
+- `backend/app/core/logging_config.py`
+- `backend/app/database.py`
+- `backend/app/api/api_router.py`
+- Every file under `backend/app/api/endpoints/`
+- Every file under `backend/app/services/`
+- Every database model and Pydantic schema.
+- `backend/requirements.txt`
+- `backend/tests/`
+- Database initialization, migrations if present, and session lifecycle.
+- Serial reader, packet parser, authentication service, evidence verifier, and tamper service.
+
+Also inspect the ESP32 firmware and its protocol implementation if present.
+
+### Audit deliverable
+
+Create a concise report containing:
+
+- Actual architecture and entry points.
+- Existing routes and their purposes.
+- Existing database tables and relationships.
+- Current frontend-to-backend request flow.
+- Current telemetry-to-database flow.
+- Known bugs and their root causes.
+- Existing tests and their results.
+- Features that are complete, incomplete, simulated, or unverified.
+- A prioritized implementation plan.
+
+Do not stop after producing the report. Continue with implementation.
+
+## 4. PHASE TWO — FIX BACKEND STARTUP AND CONFIGURATION
+
+Make the backend start reliably from the repository root using a documented command.
+
+Requirements:
+
+- Ensure imports and package structure work correctly.
+- Ensure required Python dependencies are declared.
+- Ensure environment variables are loaded consistently.
+- Separate development and production configuration.
+- Avoid committing `.env` files containing real secrets.
+- Ensure startup initializes the database safely.
+- Ensure serial reader and simulator background tasks start and stop correctly.
+- Ensure exceptions are logged usefully without exposing secrets.
+- Ensure shutdown releases serial ports and database resources.
+- Avoid starting multiple competing serial readers.
+- Add or repair a health endpoint that reports actual application readiness.
+
+Do not assume that HTTP 200 means every subsystem is healthy. Where appropriate, report API readiness, database availability, serial state, and simulator state separately.
+
+Use the Python interpreter and virtual environment appropriate to this repository. Do not replace dependencies indiscriminately.
+
+## 5. PHASE THREE — INTEGRATE FRONTEND AND BACKEND
+
+Establish one consistent frontend API client.
+
+Requirements:
+
+- Centralize the API base URL in an environment variable such as `VITE_API_BASE_URL`, following the existing configuration conventions.
+- Use a development proxy only if it matches the actual Vite configuration.
+- Never hardcode `127.0.0.1` into production frontend requests.
+- Ensure local development requests reach the actual FastAPI server.
+- Ensure production requests target the deployed backend.
+- Configure CORS for explicitly permitted frontend origins.
+- Do not use unrestricted production CORS or disable browser security.
+- Use consistent JSON

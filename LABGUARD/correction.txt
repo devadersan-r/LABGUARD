@@ -1,0 +1,167 @@
+LABGUARD — Security Hardening, Bug Fixes, and End-to-End Validation
+You are working on my existing LABGUARD project. Your task is to inspect the current repository, fix the identified security and correctness issues, improve the tests, and verify the complete authenticator workflow.
+Important: The project name is LABGUARD. Do not introduce any other project title.
+1. Rules for modifying the project
+	•	Inspect the existing source code and repository structure before making changes.
+	•	Preserve the current architecture and all working functionality wherever possible.
+	•	Make targeted, maintainable changes rather than rebuilding the project unnecessarily.
+	•	Do not claim that a feature works unless you have tested it.
+	•	Do not replace real functionality with mock implementations or placeholder code.
+	•	Never print, display, commit, or include real secret keys in logs, reports, evidence records, or test output.
+	•	Do not expose secrets in your final response.
+	•	If an important file is missing, identify it clearly and explain what is required.
+	•	Do not silently discard or overwrite existing key stores, evidence files, or configuration.
+	•	Do not stop after providing recommendations. Implement the fixes, run the tests, and report the actual results.
+2. Fix secret-key exposure immediately
+The existing key was exposed in the files shared for review. Treat it as compromised.
+	1	Generate a completely new cryptographically secure 32-byte HMAC key.
+	2	Assign an appropriate key ID and ensure the ESP32 firmware and Python verifier use the same newly provisioned key.
+	3	Do not print the new key in hexadecimal, Base64, environment-variable commands, debug output, or error messages.
+	4	Do not copy the old key into new files or configurations.
+	5	Check whether the old key or other secrets are tracked by Git. Protect the new key store and firmware secret header from future commits.
+	6	Update .gitignore to exclude real secret files, generated private key stores, local environment files, and other sensitive configuration. Keep safe example templates tracked.
+	7	If secrets are already tracked, explain the required cleanup. Removing a file from the latest commit does not remove it from Git history; recommend appropriate history cleanup and credential rotation without destroying unrelated work.
+	8	Never overwrite the existing key store automatically when it cannot be parsed or validated.
+If key rotation cannot be performed safely without user input, stop before overwriting anything, explain the issue, and provide the exact safe next step.
+3. Harden key management
+Review labguard/key_manager.py and every function that loads, resolves, generates, saves, or exports keys.
+Required changes
+	•	Use a cryptographically secure random generator to create 32-byte keys.
+	•	Validate key length, key encoding, key ID, and key-store structure.
+	•	Validate that the configured key ID matches the key ID stored in its corresponding record.
+	•	Validate the declared algorithm and reject unsupported algorithms.
+	•	Reject missing, malformed, ambiguous, or incorrectly encoded keys with clear, non-sensitive errors.
+	•	Preserve restrictive file permissions, including owner-only permissions where supported.
+	•	Use atomic file writes when updating key stores or generated configuration files, and avoid leaving partially written files.
+	•	Do not silently fall back to a new empty key store if an existing store is invalid.
+	•	Do not log key bytes or key encodings.
+Remove unsafe generic key fallback
+The current generic environment variable LABGUARD_SECRET_KEY can allow the same secret to be accepted for arbitrary requested key IDs.
+Remove this unsafe fallback from normal verification and key resolution.
+Use explicit, key-ID-specific configuration, such as LABGUARD_KEY_<KEY_ID>, or a validated key store that maps each key ID to its own key.
+A request for an unknown key ID must fail closed. It must never authenticate using an unrelated key merely because a generic environment variable is present.
+Update has_key(), get_key(), firmware header generation, documentation, and all dependent tests to follow the same rule.
+4. Fix generate_key.py
+Review and improve the existing key-generation script.
+Required behavior:
+	•	Generate keys securely.
+	•	Never print secret values or commands containing secret values.
+	•	Print only non-sensitive information such as the key ID, output locations, and success or failure status.
+	•	Fail safely if an existing key store is malformed, unreadable, or inconsistent. Do not replace it automatically.
+	•	Make overwrite and rotation operations explicit and require appropriate confirmation or a deliberate command-line option.
+	•	Ensure that rotating a key cannot silently leave the ESP32 firmware and Python verifier using different keys.
+	•	Do not allow a --no-esp32 operation to create an unnoticed configuration mismatch during rotation. If the option is retained, clearly document its purpose and add safeguards.
+	•	Preserve unrelated keys and configuration entries when updating a valid key store.
+	•	Report failures without leaking secrets.
+Document a safe workflow for initial provisioning and subsequent key rotation.
+5. Verify the HMAC implementation
+Review labguard/crypto.py.
+Maintain HMAC-SHA256 as the message authentication mechanism unless a concrete correctness issue requires a change.
+Verify that:
+	•	Keys are decoded and validated consistently.
+	•	HMAC tags use the expected 64-character lowercase hexadecimal representation.
+	•	Tag verification uses constant-time comparison, such as hmac.compare_digest.
+	•	Modified payloads fail verification.
+	•	Wrong keys fail verification.
+	•	Unknown key IDs fail verification.
+	•	Malformed tags, invalid encodings, missing fields, and invalid input types are rejected safely.
+Retain valid existing functionality and add tests for any newly discovered issues.
+6. Ensure canonical serialization is identical
+Inspect the actual canonical serializer, ESP32 firmware, and Python verifier.
+The ESP32 and Python implementation must authenticate exactly the same byte sequence for every record. Do not assume that serializing equivalent JSON objects produces identical bytes.
+Define and document a single, deterministic authenticated-record format. At minimum, specify:
+	•	Character encoding.
+	•	Field names and field order, if applicable.
+	•	Integer representation.
+	•	Handling of missing and invalid fields.
+	•	Whitespace and newline rules.
+	•	Numeric precision.
+	•	Key ID representation.
+	•	Which fields are included in the HMAC.
+	•	Which fields are excluded, such as the tag itself.
+	•	How schema versions are handled.
+Use integer temperature units such as value_centi_c if that is the existing schema, and avoid floating-point formatting differences.
+Create shared test vectors containing example records, exact canonical bytes, key IDs, and expected HMAC tags. Use a dedicated deterministic test key for these vectors, never the real project secret.
+Run the same test vectors against Python and, where practical, the ESP32 implementation or a host-buildable version of its canonicalization code.
+Do not change the existing record format unnecessarily. If a format change is required, update all dependent components together and document compatibility implications.
+7. Review the ESP32 firmware
+Locate and inspect the actual LABGUARD ESP32 firmware, including the temperature-sensor integration and serial communication.
+Confirm that it:
+	•	Reads the intended sensor correctly.
+	•	Validates readings before accepting them.
+	•	Produces the agreed record schema.
+	•	Uses the configured key ID and the correct HMAC-SHA256 algorithm.
+	•	Authenticates exactly the canonical bytes specified in the shared format.
+	•	Produces valid JSONL records with one complete record per line.
+	•	Handles sensor errors, serial interruptions, and invalid input safely.
+	•	Does not print the secret key or expose it through ordinary serial diagnostics.
+	•	Keeps secret material separate from evidence data.
+Explain the limitations of storing a symmetric HMAC key on an ESP32. HMAC authenticates data using a shared secret; it does not provide public-key digital signatures or non-repudiation. Do not claim that the design prevents physical extraction of a key from an unprotected device.
+If hardware-specific compilation or testing is unavailable, state that clearly and provide the exact unperformed validation steps.
+8. Review the independent Python verifier
+Inspect the actual verifier and the JSONL ingestion path.
+The verifier must:
+	•	Load the correct key for each record's key ID.
+	•	Reconstruct the canonical authenticated bytes exactly.
+	•	Recompute and verify the HMAC.
+	•	Reject tampered records and records with unknown key IDs.
+	•	Detect malformed JSON, missing required fields, unsupported schemas, invalid tags, and invalid field types.
+	•	Report the line number and reason for a failure without exposing secrets.
+	•	Clearly distinguish valid records from invalid or unverifiable records.
+	•	Avoid silently skipping invalid records or reporting an entire file as valid when some records fail.
+	•	Verify each record independently and provide an accurate summary of total, valid, invalid, and unverifiable records.
+If the existing format supports sequence numbers, timestamps, or record identifiers, inspect whether deletion, duplication, reordering, or replay can be detected. Do not claim that HMAC alone detects these events. Implement only the checks supported by the design, and document any remaining limitations.
+9. Improve the tests
+Update the existing tests in test_crypto.py and test_key_manager.py, along with the project test suite.
+Keep valid existing tests. Correct misleading test names and add the following coverage:
+	1	A published HMAC-SHA256 test vector with an independently specified expected result.
+	2	Correct key-length and key-encoding validation.
+	3	Unknown key IDs are rejected.
+	4	A generic environment variable cannot authenticate an arbitrary key ID.
+	5	Key-store algorithm and key-ID mismatches are rejected.
+	6	Malformed key stores are preserved and never silently replaced.
+	7	Key generation does not reveal secrets in standard output or standard error.
+	8	Key rotation updates all required configuration safely.
+	9	Modified payloads, wrong keys, malformed tags, and invalid records fail verification.
+	10	Python canonicalization matches the shared byte-level test vectors.
+	11	Valid JSONL records pass verification.
+	12	Tampered, malformed, and partially invalid JSONL files are reported accurately.
+	13	Firmware and Python produce compatible authentication results using the shared test vectors.
+Use temporary directories and deterministic test keys where appropriate. Never use the production secret in unit tests.
+Do not weaken tests simply to make the test suite pass.
+10. Documentation and repository hygiene
+Update the README and key-management documentation to explain:
+	•	LABGUARD architecture and data flow.
+	•	Safe initial key provisioning.
+	•	How the firmware and verifier receive their keys.
+	•	How to rotate a key safely.
+	•	How to run the unit tests.
+	•	How to capture JSONL evidence and verify it independently.
+	•	How to interpret verification results.
+	•	Which security properties are provided and which are not.
+	•	Which files are examples and which contain sensitive real configuration.
+Ensure keys.example.json contains only an explicitly labelled dummy key and is never loaded as a production key by default.
+Do not include real secrets in examples, screenshots, logs, reports, or generated evidence.
+11. Required final validation
+After implementing the fixes:
+	1	Run the complete Python test suite.
+	2	Report the exact test command and actual pass/fail count.
+	3	Run a valid-record end-to-end test.
+	4	Run a tampered-record end-to-end test and confirm that verification fails.
+	5	Test an unknown key ID and confirm that verification fails.
+	6	Test malformed key-store handling and confirm that existing data is preserved.
+	7	Confirm that the generator does not reveal secrets in its output.
+	8	Validate shared canonicalization and HMAC test vectors.
+	9	Compile the firmware if the required toolchain and hardware configuration are available.
+	10	Check for accidentally tracked secrets and identify any remaining exposure.
+Separate completed tests from tests that could not be performed. Do not claim physical-device validation unless it was actually performed.
+12. Final report format
+When finished, provide:
+A. Changes made — files modified and the reason for each change.
+B. Security fixes — key exposure handling, key-ID validation, fallback removal, and safe rotation.
+C. Test results — commands executed, pass/fail counts, and actual outcomes.
+D. End-to-end results — valid record, tampered record, unknown key ID, and malformed input.
+E. Remaining limitations — especially anything that still requires an ESP32, sensor, serial connection, or manual provisioning.
+F. Exact commands to run — commands for installing dependencies, testing, provisioning, building firmware, capturing evidence, and verifying evidence, based on the actual repository.
+G. Final status — classify the project as PASS, PASS WITH LIMITATIONS, or FAIL, with a clear explanation of the classification.
+Start by inspecting the repository, then implement the changes in a safe order. Do not expose any secret values in your response.

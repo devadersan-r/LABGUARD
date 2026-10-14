@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Font sizes increased by exactly 3 px across the scale */
+  --text-xs: 15px;
+  --text-xs--line-height: 22px;
+  --text-sm: 17px;
+  --text-sm--line-height: 25px;
+  --text-base: 19px;
+  --text-base--line-height: 28px;
+  --text-lg: 21px;
+  --text-lg--line-height: 30px;
+  --text-xl: 23px;
+  --text-xl--line-height: 32px;
+  --text-2xl: 27px;
+  --text-2xl--line-height: 36px;
+  --text-3xl: 33px;
+  --text-3xl--line-height: 42px;
+  --text-4xl: 39px;
+  --text-4xl--line-height: 48px;
+}
+
+@layer base {
+  :root {
+    --primary-light-blue: #BDEDFD;
+    --soft-blue-bg: #EAF9FF;
+    --pale-blue-surface: #F4FBFF;
+    --primary-action-blue: #087EE8;
+    --deep-blue-text: #082F61;
+    --dark-navy: #06264A;
+    --cyan-accent: #27C5FF;
+    --white-cards: #FFFFFF;
+    --border-blue: #C9EAF7;
+    --primary-text: #17324D;
+    --secondary-text: #58758D;
+    --success-green: #10B981;
+    --warning-amber: #F59E0B;
+    --error-red: #EF4444;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: #EAF9FF;
+    color: #17324D;
+    font-size: 17px; /* 14px + 3px */
+    line-height: 25px;
+    min-height: 100vh;
+    margin: 0;
+    padding: 0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
+}
+
+/* Monospace font exclusively for technical telemetry, IDs, sequence numbers, and hashes */
+.font-mono-telemetry {
+  font-family: 'JetBrains Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Circuit board background svg pattern for light theme */
+.bg-circuit-grid {
+  background-image: 
+    radial-gradient(circle at 50% 50%, rgba(189, 237, 253, 0.45) 0%, transparent 65%),
+    linear-gradient(rgba(8, 126, 232, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(8, 126, 232, 0.05) 1px, transparent 1px);
+  background-size: 100% 100%, 36px 36px, 36px 36px;
+}
+
+/* Light blue soft glow */
+.light-blue-glow {
+  box-shadow: 0 4px 20px -2px rgba(189, 237, 253, 0.7);
+}
+
+.cobalt-glow {
+  box-shadow: 0 4px 16px -2px rgba(8, 126, 232, 0.25);
+}

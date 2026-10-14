@@ -1,0 +1,38 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+.venv/
+venv/
+ENV/
+
+# LABGUARD Secret Keys & Keystores (NEVER COMMIT REAL SECRETS)
+keys/*.json
+!keys/*.example.json
+*.key
+.env
+.env.*
+*.tmp
+*.bak
+
+# ESP32 Secret Headers (NEVER COMMIT REAL SECRETS)
+firmware/**/secrets.h
+!firmware/**/secrets.h.example
+
+# Evidence captures (real evidence should not be committed by default)
+evidence/
+*.log
+
+# OS / Editor artifacts
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/

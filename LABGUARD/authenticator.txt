@@ -1,0 +1,361 @@
+MASTER PROMPT — LABGUARD AUTHENTICATION AND EVIDENCE VERIFICATION SYSTEM
+1. YOUR ROLE
+Act as a senior cybersecurity engineer, Python developer, embedded systems engineer, cryptographic protocol designer, software architect and QA engineer.
+Build a complete, functional project named LABGUARD.
+The objective is to develop a low-cost, offline-first, independently verifiable integrity system for laboratory measurements captured by an ESP32 and a DS18B20 temperature sensor.
+Do not build a mockup, a frontend-only simulation, or a system that merely displays hardcoded verification results. Implement the real cryptographic operations, evidence processing, key management, automated tests and hardware integration code.
+Work incrementally. Inspect the current project directory before creating or modifying files. Preserve useful existing code. Do not overwrite existing work without inspecting it.
+If hardware is not connected, implement and test the software using clearly labelled simulated evidence. Never claim that hardware integration has been tested unless it has actually been tested.
+2. PROJECT OBJECTIVE
+LABGUARD must demonstrate that unauthorized modifications to exported laboratory measurement records can be detected independently.
+The intended workflow is:
+	1	The DS18B20 measures temperature.
+	2	The ESP32 creates a structured measurement record.
+	3	The ESP32 authenticates the record using HMAC-SHA256 and a secret key.
+	4	The authenticated record is transferred over USB Serial.
+	5	The laptop saves records in a JSONL evidence file.
+	6	The user opens LABGUARD and selects an evidence file.
+	7	LABGUARD independently verifies the record authentication tags.
+	8	The application reports the result and identifies failed records.
+	9	The user can modify an exported measurement and repeat verification to demonstrate tamper detection.
+The system must work locally without requiring an internet connection, cloud account, hosted database or external verification API.
+3. REQUIRED TECHNOLOGY
+Use the following stack unless a documented technical limitation requires a change.
+	•	Python 3.
+	•	Python standard library for the cryptographic engine.
+	•	json, hmac, hashlib, secrets, pathlib, argparse, os, sys and other appropriate standard-library modules.
+	•	ESP32 firmware compatible with Arduino IDE and the Arduino-ESP32 framework.
+	•	DS18B20 sensor using the OneWire and DallasTemperature libraries.
+	•	USB Serial for transferring records.
+	•	JSONL as the evidence format.
+	•	HMAC-SHA256 for record authentication.
+	•	Pytest may be used as a development dependency for automated tests.
+	•	A simple local desktop-style web interface may use Flask if necessary, but the core verification engine must not depend on Flask.
+	•	No cloud services or unnecessary external dependencies.
+Keep the software compatible with macOS and Windows where practical.
+4. ARCHITECTURE AND PROJECT STRUCTURE
+Create a maintainable project structure similar to:
+LABGUARD/ ├── README.md ├── requirements-dev.txt ├── .gitignore ├── firmware/ │ └── LABGUARD_ESP32/ │ └── LABGUARD_ESP32.ino ├── labguard/ │ ├── init.py │ ├── canonical.py │ ├── crypto.py │ ├── key_manager.py │ ├── schema.py │ ├── verifier.py │ ├── serial_capture.py │ └── reporting.py ├── app/ │ ├── init.py │ ├── main.py │ ├── templates/ │ │ └── index.html │ └── static/ │ ├── style.css │ └── app.js ├── scripts/ │ ├── generate_key.py │ ├── capture_serial.py │ ├── create_demo_evidence.py │ └── tamper_demo.py ├── tests/ │ ├── test_canonical.py │ ├── test_crypto.py │ ├── test_key_manager.py │ ├── test_schema.py │ ├── test_verifier.py │ └── test_tampering.py ├── examples/ │ └── README.md └── docs/ ├── ARCHITECTURE.md ├── SECURITY_MODEL.md ├── DATA_FORMAT.md └── TEST_PLAN.md
+Adjust the structure if needed, but keep the cryptographic engine, firmware, interface and tests logically separated.
+Never store a real secret key in source code, sample evidence, Git history or frontend JavaScript.
+5. DEFINE THE DATA FORMAT BEFORE IMPLEMENTING CRYPTOGRAPHY
+First, document the exact schema and canonical byte representation.
+Use an initial record schema similar to:
+{ "schema": "labguard-v1", "session_id": "SESSION-001", "device_id": "DEVICE-01", "seq": 1, "elapsed_ms": 2000, "source": "DS18B20", "value": 28.50, "unit": "C", "auth": { "algorithm": "HMAC-SHA256", "key_id": "KEY-001", "tag": "64-character-lowercase-hexadecimal-tag" } }
+This is a proposed schema. Finalize and document it before implementing the firmware and verifier.
+Requirements:
+	•	All required fields must have strict types and validation rules.
+	•	Sequence numbers must be positive integers; reject booleans where an integer is expected.
+	•	Measurement values must be finite numbers.
+	•	Reject NaN, Infinity and -Infinity.
+	•	Restrict identifiers and strings to documented lengths and permitted characters.
+	•	Define whether extra fields are rejected or supported by a schema-versioning mechanism.
+	•	Reject duplicate JSON object keys to prevent ambiguous interpretation.
+	•	Do not silently coerce strings into numbers.
+	•	Validate the algorithm and key identifier.
+	•	Reject malformed or unsupported schemas clearly.
+Use a deterministic canonical serialization specification that can be reproduced exactly in both Python and C++.
+For the initial implementation, prefer a documented restricted JSON representation with:
+	•	UTF-8 encoding.
+	•	Fixed field names and field order.
+	•	No insignificant whitespace.
+	•	Explicit rules for string escaping.
+	•	An exact numeric representation shared by both implementations.
+	•	No ambiguous floating-point formatting.
+Prefer storing temperature as an integer in hundredths of a degree Celsius, such as 2850 for 28.50 °C, internally and in the authenticated record schema. Name the field value_centi_c and document that the displayed temperature is derived by dividing by 100.
+Use integers for the sequence number and elapsed milliseconds.
+Define canonicalization over the complete record payload excluding the auth object. Document the precise bytes used for authentication.
+Do not independently call Python json.dumps() and an arbitrary C++ JSON serializer and assume their outputs will match.
+Add shared test vectors containing payloads, expected canonical bytes and expected HMAC tags. The same vectors must be usable to test Python and firmware implementations.
+If the canonicalization contract cannot be implemented consistently, stop and explain the incompatibility rather than producing unreliable authentication.
+6. CRYPTOGRAPHIC ENGINE
+Implement actual HMAC-SHA256 using the Python standard library.
+In labguard/crypto.py, provide functions similar to:
+	•	compute_hmac(key, canonical_bytes)
+	•	verify_hmac(key, canonical_bytes, supplied_tag)
+	•	decode_key(encoded_key)
+	•	encode_tag(tag_bytes)
+Requirements:
+	1	Use hmac.new(key, message, hashlib.sha256).digest() for generation.
+	2	Encode tags as exactly 64 lowercase hexadecimal characters.
+	3	Use hmac.compare_digest() for authentication-tag comparisons.
+	4	Reject malformed tag encodings.
+	5	Reject empty or incorrectly sized keys.
+	6	Do not substitute ordinary SHA-256 for HMAC.
+	7	Do not log the key or include it in exceptions.
+	8	Include unit tests for correct tags, incorrect keys, altered messages, malformed tags and invalid key lengths.
+	9	Use established cryptographic primitives rather than implementing SHA-256 or HMAC manually.
+Document that HMAC provides symmetric-key authentication and integrity, not digital signatures or non-repudiation.
+7. SECRET-KEY GENERATION AND MANAGEMENT
+Build a key-management module that generates cryptographically random keys using Python's secrets module.
+Requirements:
+	•	Generate a fresh 32-byte random key.
+	•	Represent keys using a documented encoding such as hexadecimal or Base64.
+	•	Assign each key a non-secret identifier.
+	•	Provide a CLI command for key generation.
+	•	Never write keys to JSONL evidence files.
+	•	Never embed real keys in source code or frontend assets.
+	•	Never print a secret key during normal verification.
+	•	Do not automatically generate a different key every time the verifier starts.
+	•	Do not silently replace a key when a verification failure occurs.
+	•	Handle missing keys and unknown key identifiers as explicit errors.
+	•	Support multiple key identifiers if necessary.
+	•	Separate the key used by a measurement-producing device from the interface and verification code.
+For the development version, allow an operator to provide the key using an environment variable or a protected local key file outside the evidence directory.
+On POSIX systems, create key files with restrictive permissions where supported. Explain that filesystem permissions do not provide hardware-backed protection.
+Do not store real keys in a publicly accessible project folder or Git repository.
+For the ESP32 prototype, clearly document the limitations of storing a software key in firmware or ordinary device flash. A key hardcoded into firmware can potentially be extracted.
+Keep the key-generation and key-loading APIs separate so that a future secure element can be integrated without redesigning the entire verifier.
+Never claim that the initial software-key arrangement offers production-grade key protection.
+8. EMBEDDED FIRMWARE
+Create an Arduino-compatible ESP32 sketch that:
+	•	Reads a real DS18B20 sensor.
+	•	Uses GPIO 4 as the default data pin for a conventional ESP32 DevKit.
+	•	Documents the 4.7 kΩ pull-up resistor between data and 3.3 V.
+	•	Uses the OneWire and DallasTemperature libraries.
+	•	Handles missing or disconnected sensors.
+	•	Uses a documented session identifier.
+	•	Maintains a monotonically increasing sequence number within a session.
+	•	Uses a monotonic elapsed-time counter rather than pretending to provide trusted wall-clock time.
+	•	Converts the temperature into integer hundredths of a degree Celsius.
+	•	Constructs the agreed canonical payload.
+	•	Computes HMAC-SHA256 over the agreed payload bytes.
+	•	Outputs complete JSONL-compatible records over USB Serial.
+	•	Uses the exact same schema and canonicalization rules as the Python verifier.
+	•	Handles a failed measurement without emitting a falsely authenticated temperature.
+	•	Never exports the secret key.
+Do not invent a fake cryptographic function or use a placeholder tag in the final firmware.
+If the selected Arduino cryptographic library or API is uncertain, research its documentation, select a suitable maintained implementation, document the dependency and provide a real build/test procedure.
+Provide clear Arduino IDE setup and upload instructions.
+9. SERIAL CAPTURE AND EVIDENCE EXPORT
+Implement labguard/serial_capture.py and a CLI utility that can capture JSONL records over USB Serial.
+Requirements:
+	•	Select a serial port and baud rate.
+	•	Allow the operator to specify an output evidence file.
+	•	Save only complete valid JSON records received through the designated protocol.
+	•	Do not silently discard malformed records; report them and record capture errors separately.
+	•	Flush data to disk appropriately.
+	•	Handle disconnection and shutdown cleanly.
+	•	Avoid modifying authenticated payload fields during capture.
+	•	Never store secret keys in the evidence file.
+	•	Keep diagnostic messages separate from evidence records.
+	•	Provide a clear method to distinguish serial diagnostic output from actual evidence records.
+If a serial library is required, isolate it from the cryptographic engine and document its installation.
+10. INDEPENDENT PYTHON VERIFIER
+Implement labguard/verifier.py.
+The verifier must treat imported evidence files as untrusted.
+For every record:
+	1	Parse one JSON object per line.
+	2	Reject duplicate keys and malformed JSON.
+	3	Validate the schema and types.
+	4	Reconstruct the exact canonical payload bytes.
+	5	Identify the key using the non-secret key identifier.
+	6	Load the corresponding trusted key from the configured local key store.
+	7	Recompute the HMAC-SHA256 tag.
+	8	Compare the expected and supplied tags using hmac.compare_digest().
+	9	Validate sequence and session consistency.
+	10	Record the result for that specific line.
+	11	Continue processing later records when safe, without concealing earlier errors.
+Report at least:
+	•	Overall result: VALID, INVALID or INCOMPLETE/UNVERIFIABLE.
+	•	Evidence filename.
+	•	Number of records encountered.
+	•	Number of successfully authenticated records.
+	•	Number of authentication failures.
+	•	Number of malformed or structurally invalid records.
+	•	Unknown-key and missing-key errors.
+	•	Sequence gaps, duplicate sequences and ordering problems.
+	•	Session consistency problems.
+	•	First failing line number and failure category.
+	•	Clear warnings when completeness cannot be established.
+Use precise result semantics:
+	•	VALID: all supplied records pass the implemented checks, with no detected inconsistency.
+	•	INVALID: one or more records fail authentication or violate integrity-related validation rules.
+	•	INCOMPLETE/UNVERIFIABLE: the file cannot be fully assessed because necessary information, such as a verification key or trusted completeness reference, is unavailable.
+Document how the overall status is determined if several categories of errors occur.
+Never report a file as VALID if any required record failed authentication or required validation.
+Do not claim to identify exactly which field an attacker changed from an HMAC mismatch alone.
+11. SEQUENCE VALIDATION AND HASH CHAINING
+Implement basic sequence validation before attempting hash chaining.
+Detect:
+	•	Duplicate sequence numbers.
+	•	Out-of-order records.
+	•	Missing sequence numbers when the expected starting sequence and continuity rules are known.
+	•	Unexpected session changes.
+	•	Unexpected device or key identifiers where policy requires consistency.
+Treat the following as a separate optional feature: HMAC-linked records or a hash chain.
+Only implement chaining after the basic end-to-end HMAC system passes tests.
+If chaining is implemented:
+	•	Include the previous record's authentication tag or an explicitly defined previous-record digest in the authenticated payload.
+	•	Define the first-record convention.
+	•	Verify every link.
+	•	Detect deletion, insertion, reordering and broken continuity where possible.
+	•	Explain that a chain alone cannot prove that the final records have not been removed.
+	•	Support a trusted external final checkpoint or manifest containing the expected record count and final tag if completeness verification is required.
+Do not claim truncation detection unless a trusted completeness reference is actually checked.
+12. USER INTERFACE
+After the cryptographic engine and CLI work correctly, create a clean, professional, locally hosted LABGUARD interface.
+The interface should include:
+	•	LABGUARD branding.
+	•	A short description: "Offline laboratory evidence integrity verification."
+	•	A file-selection control for JSONL evidence.
+	•	A Verify Evidence action.
+	•	A clear overall status.
+	•	Records checked, authenticated and failed.
+	•	A table of record sequence, measurement, unit and verification result.
+	•	Failure line numbers and useful diagnostic messages.
+	•	Sequence and completeness warnings.
+	•	A way to view the verification report.
+	•	A clearly labelled simulated-demo mode.
+	•	A way to run the tampering demonstration using a separate copy of sample evidence.
+Never trust client-side verification results. All cryptographic checks must execute in the trusted Python backend.
+Do not expose secret keys to browser JavaScript, HTML responses, application logs or frontend API responses.
+Treat file uploads as untrusted input. Enforce reasonable file-size limits and reject malformed data safely.
+If using Flask:
+	•	Bind to localhost by default.
+	•	Do not expose the development server to the public internet.
+	•	Do not enable debug mode in normal operation.
+	•	Use appropriate request and upload validation.
+	•	Never present a browser-based UI as proof of secure key storage.
+The interface must display actual verifier results rather than hardcoded success messages.
+13. TAMPER-DEMONSTRATION TOOL
+Create a repeatable demonstration using sample evidence.
+Workflow:
+	1	Generate a demonstration key securely.
+	2	Create a clearly labelled simulated evidence file.
+	3	Authenticate several sample measurement records.
+	4	Verify the untouched file.
+	5	Copy the file to a separate tampered file.
+	6	Modify one authenticated measurement value without updating its tag.
+	7	Verify the tampered copy.
+	8	Display the difference in results.
+Expected behavior:
+Original file: VALID — all supplied records passed the implemented authentication and validation checks.
+Tampered file: INVALID — authentication mismatch at the modified record.
+Never modify the original evidence file during the demonstration.
+Make it clear that sample records are simulated and are not measurements collected from real laboratory hardware.
+Do not use a production key for demonstrations.
+14. AUTOMATED TESTING
+Create comprehensive automated tests.
+Include tests for:
+	1	Correct HMAC generation and verification.
+	2	Modified measurement values.
+	3	Modified units and metadata.
+	4	Incorrect verification keys.
+	5	Malformed authentication tags.
+	6	Malformed JSON.
+	7	Duplicate JSON keys.
+	8	Missing required fields.
+	9	Invalid field types.
+	10	Boolean values supplied where integers are required.
+	11	Non-finite measurement values.
+	12	Unknown key identifiers.
+	13	Missing verification keys.
+	14	Duplicate sequence numbers.
+	15	Out-of-order records.
+	16	Missing sequence numbers.
+	17	Mixed sessions.
+	18	Unsupported schema versions.
+	19	Truncated JSONL files.
+	20	Empty evidence files.
+	21	Extra or unsupported fields.
+	22	Canonical serialization consistency.
+	23	Shared test vectors between Python and the embedded implementation.
+	24	Tampering with the authentication tag itself.
+	25	Verification after harmless JSON whitespace or key-order changes.
+For the last test, explicitly document that harmless changes outside the authenticated payload may be acceptable only if the schema permits them. Changing any authenticated value must cause verification to fail.
+A canonical representation should ensure that equivalent permitted JSON representations reconstruct the same authenticated payload bytes. Do not accidentally authenticate the formatting of the outer evidence file unless that is explicitly part of the design.
+Run the tests and report their actual results.
+Do not fabricate test results or mark unexecuted tests as passed.
+15. COMMAND-LINE INTERFACE
+Provide convenient commands for:
+	•	Generating a development key.
+	•	Verifying an evidence file.
+	•	Capturing serial evidence.
+	•	Creating simulated evidence.
+	•	Creating a tampered copy.
+	•	Running automated tests.
+	•	Launching the local interface.
+Document exact commands for macOS and Windows, including virtual environment setup.
+Examples of desired commands:
+python scripts/generate_key.py python -m labguard.verifier examples/demo.jsonl python scripts/create_demo_evidence.py python scripts/tamper_demo.py python -m pytest -q python -m app.main
+Adjust commands to the final implementation and ensure they actually work.
+16. DOCUMENTATION
+Create documentation explaining:
+	•	System architecture.
+	•	Installation and dependencies.
+	•	Hardware wiring.
+	•	Arduino IDE setup.
+	•	Secret-key generation and storage.
+	•	Canonical payload specification.
+	•	HMAC-SHA256 operation.
+	•	JSONL evidence format.
+	•	Serial capture.
+	•	Independent verification.
+	•	Tampering demonstration.
+	•	Threat model.
+	•	Testing procedure.
+	•	Limitations.
+	•	Troubleshooting.
+	•	Future secure-element integration.
+Explain HMAC in beginner-friendly language.
+Explicitly distinguish:
+	•	Record integrity from physical measurement accuracy.
+	•	HMAC authentication from digital signatures.
+	•	Software-held keys from hardware-protected keys.
+	•	Record authentication from proof of session completeness.
+	•	A sequence check from a cryptographic chain.
+	•	Simulated data from real sensor measurements.
+17. SECURITY AND IMPLEMENTATION RULES
+These rules are mandatory.
+	•	Never implement fake cryptography.
+	•	Never use a plain hash in place of HMAC.
+	•	Never hardcode a production secret.
+	•	Never put secret keys in evidence exports.
+	•	Never silently replace missing or incorrect keys.
+	•	Never trust file names, device IDs or session IDs as proof of authenticity.
+	•	Never report exact field-level tampering attribution without independent evidence.
+	•	Never claim that the sensor is calibrated merely because authentication succeeds.
+	•	Never claim that symmetric HMAC provides non-repudiation.
+	•	Never claim that the software-key prototype is secure against firmware or key extraction.
+	•	Never claim to detect all truncation attacks without a trusted completeness reference.
+	•	Never claim hardware integration works without testing it.
+	•	Never fabricate test results, benchmark results or completed features.
+	•	Do not download arbitrary binaries or run untrusted scripts without reviewing their origin and purpose.
+	•	Avoid unnecessary dependencies, cloud services and excessive abstraction.
+18. DEVELOPMENT WORKFLOW
+Work in the following order.
+PHASE 1 — Inspect the existing project and propose the architecture, schema, canonicalization rules, threat model and key-management approach.
+PHASE 2 — Implement and test the Python cryptographic engine, key manager, schema validator and canonical serializer.
+PHASE 3 — Implement the independent verifier and command-line interface.
+PHASE 4 — Create simulated evidence and run the original-versus-tampered demonstration.
+PHASE 5 — Implement ESP32 firmware using the exact same record and canonicalization contract.
+PHASE 6 — Implement serial capture and test actual device-to-laptop evidence transfer when hardware is available.
+PHASE 7 — Add sequence validation and optionally hash chaining.
+PHASE 8 — Build the local user interface using the real verification engine.
+PHASE 9 — Run the full test suite, inspect for security issues and complete documentation.
+After each phase:
+	•	Summarize what was implemented.
+	•	List the files created or modified.
+	•	Run relevant tests.
+	•	Report actual results.
+	•	Identify unresolved issues.
+	•	Explain how to reproduce the tests.
+	•	Do not move forward while a critical correctness issue remains unresolved.
+Do not stop after generating a plan. Once the initial architecture and canonicalization contract are documented, implement the system phase by phase. Ask me only when a genuinely blocking decision cannot be resolved safely.
+19. FINAL ACCEPTANCE CRITERIA
+LABGUARD is ready for a software demonstration only when:
+	•	A development key can be generated securely.
+	•	Real HMAC-SHA256 tags can be generated and independently verified.
+	•	Canonicalization is documented and deterministic.
+	•	Sample evidence can be created.
+	•	An untouched evidence file verifies successfully.
+	•	A modified authenticated measurement fails verification.
+	•	Malformed input is handled safely.
+	•	Sequence inconsistencies are reported correctly.
+	•	Missing and incorrect keys are handled explicitly.
+	•	Automated tests pass and their results are reported honestly.
+	•	The UI, if present, displays the real backend result.
+	•	Documentation explains security assumptions and limitations.
+Full hardware integration is a separate acceptance stage and must not be marked complete until tested on a real ESP32 and DS18B20.
+Begin with PHASE 1 now. Inspect the current directory and present the proposed architecture, finalized data schema, canonicalization specification, threat model and key-management design before writing the cryptographic implementation.

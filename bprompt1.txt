@@ -1,0 +1,689 @@
+# LABGUARD — MASTER BACKEND ENGINEERING PROMPT
+
+## 1. ROLE AND EXPECTATIONS
+
+Act as a senior backend engineer, embedded-systems engineer, application security engineer, and technical mentor.
+
+You are helping me build **LabGuard — a local, hardware-integrated secure evidence authentication and monitoring system** for a college cybersecurity hackathon.
+
+I am a Computer Science Engineering student with developing programming skills. I will use AI-assisted development, but I need an actual working application, not a mockup or a collection of disconnected code files.
+
+Your responsibilities:
+
+- Inspect my existing frontend and authenticator code before changing anything.
+- Design the backend around the real hardware, frontend, and cryptographic verification logic.
+- Implement functionality incrementally.
+- Explain significant technical decisions and security implications.
+- Run tests and fix errors instead of assuming generated code works.
+- Preserve working existing code wherever possible.
+- Never fabricate successful hardware communication, authentication, or verification results.
+
+Be technically honest. If a feature is incomplete, simulated, insecure, or untested, explicitly identify it.
+
+---
+
+## 2. PROJECT CONTEXT
+
+Project name: **LabGuard**
+
+Purpose: Demonstrate a locally operated hardware evidence-authentication system that collects sensor measurements, verifies their cryptographic integrity, records verification results, and displays them through a web frontend.
+
+My existing resources:
+
+1. A frontend ZIP named `trueguard-secure-access-portal.zip`, developed by my frontend teammate.
+2. An authenticator and ESP32 firmware ZIP named `LABGUARD.zip`, developed using Antigravity on another computer.
+3. An existing Windows laptop and VS Code development environment.
+4. ESP32 development hardware and associated sensor components.
+
+The existing frontend uses React, TypeScript, and Vite according to the initial inspection. Verify this against the actual files.
+
+The authenticator ZIP contains Python verification code, ESP32 firmware, key-management code, tests, documentation, and sample evidence records. Its Python test suite previously passed 41 tests in another environment. Rerun the tests in the current environment before relying on that result.
+
+Do not assume the frontend, authenticator, or firmware is fully production-ready.
+
+---
+
+## 3. CRITICAL ARCHITECTURE REQUIREMENT: NO CLOUD
+
+The system must operate locally on my Windows laptop.
+
+**Do not use cloud services or cloud-hosted communication for the core demonstration.**
+
+Do not introduce Supabase, Firebase, AWS, Azure, hosted databases, cloud message brokers, or remote authentication services.
+
+The required architecture is:
+
+ESP32 + physical sensor
+↓
+USB cable / USB serial
+↓
+Windows COM port
+↓
+Python serial communication service
+↓
+Evidence validation and HMAC verification
+↓
+Local database and verification history
+↓
+FastAPI REST API
+↓
+Existing React frontend
+
+The frontend communicates with FastAPI through localhost HTTP requests.
+
+Example local addresses:
+
+- Frontend: `http://localhost:5173`
+- Backend: `http://127.0.0.1:8000`
+- API documentation: `http://127.0.0.1:8000/docs`
+
+These are development defaults, not hardcoded assumptions. Inspect the actual frontend configuration and choose compatible settings.
+
+The ESP32 must communicate through USB serial. Do not silently substitute Wi-Fi, MQTT, WebSockets to an external server, or a cloud database.
+
+A local WebSocket between the frontend and local backend is permitted if it materially improves live dashboard updates.
+
+---
+
+## 4. FIRST TASK: INSPECT BEFORE CODING
+
+Do not immediately generate an entire backend.
+
+First inspect the files I place in the Antigravity workspace.
+
+Identify the frontend root, package configuration, source files, page components, existing authentication implementation, API calls, data models, charts, session views, and verification screens.
+
+Inspect the authenticator repository, including:
+
+- Python entry points.
+- Verification functions.
+- Evidence schema.
+- HMAC-SHA256 implementation.
+- Canonical message or payload serialization.
+- Key-store implementation.
+- Key lookup and key identifiers.
+- ESP32 firmware.
+- Serial output format.
+- Sequence-number handling.
+- Existing tests.
+- Sample valid and invalid evidence.
+- Dependencies and configuration files.
+
+Produce a concise integration report containing:
+
+1. Existing frontend structure.
+2. Existing authenticator structure.
+3. Actual hardware and sensor interfaces found in the code.
+4. Expected serial message format.
+5. Cryptographic verification requirements.
+6. Existing frontend API expectations.
+7. Missing functionality.
+8. Security risks.
+9. Proposed backend architecture.
+10. Implementation phases.
+
+Do not invent files, functions, API contracts, hardware components, or serial message formats.
+
+If the ZIP contents are not present in the workspace, stop and tell me exactly which folders I need to extract or copy. Do not recreate existing code from assumptions.
+
+Wait for my website screenshots before finalizing the page-to-endpoint mapping. You may complete the repository inspection and architecture proposal first.
+
+---
+
+## 5. TECHNOLOGY STACK
+
+Prefer the following stack unless inspection reveals a concrete incompatibility.
+
+### Backend
+
+- Python.
+- FastAPI.
+- Uvicorn.
+- Pydantic for request and response validation.
+- PySerial for USB serial communication.
+- SQLite for persistent local storage.
+- SQLAlchemy only if it simplifies database management without unnecessary complexity.
+- Pytest for automated testing.
+
+### Frontend integration
+
+- Existing React + TypeScript + Vite application.
+- Native `fetch` or its existing HTTP client.
+- Existing UI components and styles.
+- Local REST endpoints.
+- WebSocket or periodic polling for live updates where appropriate.
+
+Do not replace the frontend framework or redesign the interface unless I explicitly request it.
+
+Do not add Redis, Docker, Kubernetes, a separate Node.js backend, or an external database unless a demonstrated requirement justifies it.
+
+---
+
+## 6. HARDWARE AND SERIAL COMMUNICATION
+
+The hardware interface is a core requirement, not an optional enhancement.
+
+Inspect the actual ESP32 firmware before deciding how to communicate with it.
+
+### Serial receiver
+
+Implement a dedicated serial communication service that:
+
+- Allows the operator to select an available COM port.
+- Uses a configurable baud rate matching the ESP32 firmware.
+- Opens and closes the serial connection safely.
+- Reads incoming serial data without blocking FastAPI request handlers.
+- Handles incomplete lines, malformed JSON, invalid UTF-8, timeouts, and disconnections.
+- Reconnects safely when the device becomes available again.
+- Avoids creating duplicate reader threads or tasks.
+- Provides accurate connection status and last-received timestamp.
+- Logs errors without printing cryptographic secrets.
+- Shuts down cleanly.
+
+Use a background thread, asynchronous serial library, or another justified design. Keep serial I/O isolated from API handlers.
+
+Provide local API endpoints for:
+
+- Listing available serial ports.
+- Reading connection status.
+- Connecting to a selected port.
+- Disconnecting safely.
+- Reading recent measurements and connection errors.
+
+Only allow connections to appropriate serial devices. Validate user input and prevent arbitrary command execution.
+
+### Serial protocol
+
+Prefer newline-delimited JSON only if it is compatible with the actual firmware.
+
+Example of a possible transport envelope:
+
+`{"type":"evidence","payload":{...},"auth":{...}}`
+
+This is an illustration, not the verified firmware schema.
+
+Inspect the existing firmware and use its actual protocol. If the firmware uses another format, document it and adapt the receiver accordingly.
+
+If a protocol change is necessary, coordinate changes between firmware and backend. Do not change the payload serialization used for HMAC verification without updating both sides and their tests.
+
+Never treat a valid JSON message as proof of authenticity.
+
+### Hardware scope
+
+Implement only the sensor types and peripherals supported by the supplied hardware and firmware.
+
+Do not fabricate readings or report a connected sensor when no sensor data has been received.
+
+Synthetic data may be provided through an explicitly labeled development simulator for frontend development and testing. It must never be presented as real hardware evidence.
+
+---
+
+## 7. AUTHENTICATOR AND CRYPTOGRAPHIC SECURITY
+
+This is one of the most important parts of LabGuard.
+
+Reuse the existing authenticator instead of rewriting its cryptographic implementation unnecessarily.
+
+The backend must invoke the actual verifier and respect the exact evidence schema, canonicalization rules, key identifiers, and authentication-tag format.
+
+### Required verification behavior
+
+The backend must distinguish between:
+
+- Valid authenticated evidence.
+- Invalid authentication tag.
+- Unknown key identifier.
+- Malformed evidence.
+- Unsupported evidence schema.
+- Duplicate or replayed evidence.
+- Verification unavailable because of a configuration or internal error.
+
+Do not collapse all these outcomes into a generic successful response.
+
+### Security rules
+
+1. Never trust a `verified: true` field supplied by the frontend or ESP32.
+2. Never mark evidence valid without running cryptographic verification.
+3. Use constant-time comparison through an appropriate cryptographic library.
+4. Preserve the exact payload bytes or canonical serialization required by the existing implementation.
+5. Do not invent or regenerate an HMAC tag during verification.
+6. Do not place secret keys in React source code, API responses, logs, or Git repositories.
+7. Do not silently create a replacement key when a required key is missing.
+8. Keep key files outside public directories.
+9. Restrict file permissions where practical on Windows.
+10. Use a controlled, documented key-rotation procedure.
+11. Return explicit failure results when verification cannot be performed.
+12. Never expose secret key material through error messages.
+
+The supplied ZIP may contain actual key material. Treat it as potentially exposed.
+
+Before the final demonstration, establish a coordinated key-rotation procedure. Generate a replacement secret, update the firmware and verifier consistently, reflash the ESP32, and test valid and invalid evidence.
+
+Do not break the existing evidence verification tests while performing this process.
+
+### Replay protection
+
+Inspect whether the existing evidence format supports sequence numbers, session IDs, device IDs, timestamps, or nonces.
+
+Implement duplicate and replay detection using the available fields and a persistent local record.
+
+A repeated record must not silently become a new valid measurement. Keep cryptographic validity separate from replay status: a correctly signed old record can still be a replay.
+
+Do not claim protection against every replay or impersonation attack unless the protocol actually supports it.
+
+### Device identity limitation
+
+An HMAC proves that a message was created by someone possessing the shared secret and that the authenticated content has not changed. It does not automatically prove that a particular physical ESP32 is genuine or uncompromised.
+
+Document this distinction accurately.
+
+---
+
+## 8. LOCAL AUTHENTICATION AND USER SESSIONS
+
+Inspect the frontend's login and password-recovery pages before implementing these features.
+
+Distinguish two different mechanisms:
+
+1. Human-user authentication for access to the dashboard.
+2. Device-message authentication for verifying sensor evidence.
+
+They must not be confused.
+
+If the frontend requires login, replace simulated login behavior with a real local authentication implementation.
+
+Requirements:
+
+- Store passwords using Argon2id or another appropriate password-hashing algorithm.
+- Never store plaintext passwords.
+- Use secure random session identifiers or an appropriately implemented token mechanism.
+- Protect state-changing API endpoints.
+- Implement logout and session expiration.
+- Avoid logging credentials, session tokens, or secrets.
+- Validate all inputs.
+- Configure browser-origin restrictions correctly.
+
+A localhost application still has security risks. A malicious website may attempt to contact local services, so origin validation and endpoint protections must be considered.
+
+If the frontend includes a forgot-password screen, do not pretend that email recovery works without an email service. For an offline demo, implement a documented local administrative recovery procedure or another secure, clearly explained offline alternative.
+
+Do not create a publicly exposed default administrator account with a hardcoded password.
+
+---
+
+## 9. LOCAL DATABASE AND EVIDENCE HISTORY
+
+Use SQLite for the initial offline implementation.
+
+Design a minimal persistent schema based on the existing evidence format.
+
+Potential entities include:
+
+- Local users and sessions, if required.
+- Devices.
+- Recording sessions.
+- Sensor measurements.
+- Verification results.
+- Connection or application events.
+
+Avoid unnecessary tables.
+
+Each accepted evidence record should retain the information required to reconstruct its verification outcome, including relevant device and session identifiers, sequence number, measurement, timestamp, verification status, and reason for failure where applicable.
+
+Keep original evidence or an appropriate immutable representation where needed for verification and auditability.
+
+Use database transactions and uniqueness constraints where suitable.
+
+Do not store secrets or passwords in evidence records.
+
+Do not silently overwrite previous evidence.
+
+Store timestamps consistently in UTC and convert them for display when required.
+
+Ensure that restarting the backend does not erase measurement history.
+
+---
+
+## 10. BACKEND API CONTRACT
+
+After inspecting the frontend, produce an API contract matching its actual needs.
+
+The following is a proposed starting point, not a requirement to implement every endpoint regardless of necessity.
+
+### Health
+
+`GET /api/health`
+
+Returns backend status and relevant service availability.
+
+### Authentication
+
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `GET /api/auth/me`
+- `POST /api/auth/forgot-password`, only if a secure local workflow can be implemented.
+
+### Serial connection
+
+- `GET /api/serial/ports`
+- `GET /api/serial/status`
+- `POST /api/serial/connect`
+- `POST /api/serial/disconnect`
+
+### Dashboard
+
+- `GET /api/dashboard/stats`
+- `GET /api/dashboard/latest`
+
+### Sessions
+
+- `GET /api/sessions`
+- `GET /api/sessions/{session_id}`
+- `POST /api/sessions`, if required by the frontend.
+- `GET /api/sessions/{session_id}/records`
+
+### Evidence
+
+- `POST /api/evidence/verify`
+- `GET /api/evidence`
+- `GET /api/evidence/{evidence_id}`
+
+The verification endpoint must accept the correct evidence format and call the real verifier.
+
+Validate every request with Pydantic models or equivalent validation.
+
+Use appropriate HTTP status codes and consistent JSON response formats.
+
+Do not expose Python stack traces, key contents, filesystem paths, or sensitive configuration to the browser.
+
+Document each implemented endpoint and provide example requests and responses.
+
+Do not expose unrestricted file paths or arbitrary command execution through the API.
+
+---
+
+## 11. CONNECT THE FRONTEND
+
+After receiving my website screenshots and inspecting the frontend source, map each relevant screen to the required backend endpoint.
+
+Inspect:
+
+- Login and logout.
+- Dashboard metrics.
+- Device connection controls.
+- Recording/session pages.
+- Evidence verification pages.
+- Verification history.
+- Alerts or event lists, if present.
+- Loading, error, empty, and disconnected states.
+
+Replace mock values and simulated success messages with actual API requests.
+
+Requirements:
+
+- Centralize API configuration.
+- Use environment variables for frontend API base configuration.
+- Keep local development defaults documented.
+- Handle HTTP errors and network failures.
+- Prevent duplicate submissions.
+- Show real serial connection status.
+- Distinguish no device connected from zero sensor readings.
+- Display the time of the last real measurement.
+- Update metrics from stored or verified records.
+- Keep frontend and backend types consistent.
+- Avoid duplicating cryptographic verification logic in the browser.
+
+The browser must never be responsible for deciding whether evidence is cryptographically valid.
+
+Do not rebuild working pages or replace the existing design merely to simplify integration.
+
+---
+
+## 12. TESTING REQUIREMENTS
+
+Write and run automated tests.
+
+### Authenticator tests
+
+- Valid evidence passes verification.
+- Modified measurement fails verification.
+- Modified authentication tag fails verification.
+- Unknown key is rejected.
+- Malformed evidence is rejected.
+- Unsupported schema is rejected.
+- Duplicate evidence is detected.
+- Replay detection survives backend restarts where applicable.
+
+### Serial tests
+
+- Port listing works.
+- Connection failures are handled.
+- Malformed serial messages do not crash the backend.
+- Disconnects update connection status.
+- Reconnection does not create duplicate readers.
+- Backend shutdown closes serial resources.
+
+Mock serial hardware for automated tests. Do not require a physical ESP32 to run the basic software test suite.
+
+### API and database tests
+
+- Health endpoint responds correctly.
+- Login rejects invalid credentials.
+- Protected endpoints enforce authentication where required.
+- Evidence is not marked verified without actual verification.
+- Invalid requests are rejected.
+- Evidence history persists across restarts.
+- Database constraints prevent duplicate records where appropriate.
+
+### Frontend integration tests
+
+- Login uses the real backend.
+- Dashboard data comes from API responses.
+- Serial connection status is displayed accurately.
+- Verification results reflect backend responses.
+- API errors are visible to the user.
+
+Run the existing authenticator tests before and after integration.
+
+Report the actual number of tests passed and failed. Never claim tests passed if they were not executed.
+
+---
+
+## 13. PROJECT STRUCTURE
+
+Choose the final structure after inspecting the supplied files, but aim for a clear separation of responsibilities.
+
+A possible backend layout is:
+
+`backend/`
+- `app/main.py`
+- `app/api/`
+- `app/core/`
+- `app/services/`
+- `app/models/`
+- `app/schemas/`
+- `app/database.py`
+- `tests/`
+- `requirements.txt`
+- `.env.example`
+- `.gitignore`
+- `README.md`
+
+Integrate the existing authenticator into an appropriate module or package without unnecessarily duplicating its implementation.
+
+Keep the existing frontend and firmware in their current directories unless there is a compelling reason to move them.
+
+Do not put the SQLite database, secret keys, local credentials, or generated logs in publicly served frontend directories.
+
+---
+
+## 14. DEVELOPMENT ON WINDOWS
+
+Provide Windows-compatible commands.
+
+The development environment is Windows, with the user account:
+
+`C:\Users\Devadersan`
+
+Prefer a Python virtual environment.
+
+Example setup commands:
+
+`py -m venv .venv`
+
+`.\.venv\Scripts\activate`
+
+`python -m pip install -r requirements.txt`
+
+Use the actual Python launcher and installation available on the machine. Diagnose missing dependencies instead of assuming installation succeeded.
+
+Provide exact instructions for:
+
+- Installing dependencies.
+- Configuring the serial port.
+- Finding the ESP32 COM port in Device Manager.
+- Running the backend.
+- Running the frontend.
+- Connecting the hardware.
+- Opening the local application.
+- Running tests.
+- Troubleshooting common errors.
+
+Do not hardcode a COM port or assume a particular baud rate without inspecting the firmware.
+
+Handle Windows serial-port contention, including the possibility that a serial monitor is already using the port.
+
+---
+
+## 15. USE AVAILABLE AGENT SKILLS
+
+Inspect the installed agent skills and use the ones actually available in the current development environment.
+
+Relevant skills may include:
+
+- `api-and-interface-design`
+- `browser-testing-with-devtools`
+- `code-review-and-quality`
+- `debugging-and-error-recovery`
+- `frontend-ui-engineering`
+- `incremental-implementation`
+- `planning-and-task-breakdown`
+- `security-and-hardening`
+- `git-workflow-and-versioning`
+- `find-skills`
+
+These names are a reference list, not proof that every skill is installed or supported by Antigravity.
+
+Do not claim to have used a skill unless you actually inspected or invoked it.
+
+Apply security review, incremental development, API-contract validation, and debugging practices even if a particular skill is unavailable.
+
+Do not install additional skills or dependencies without explaining why they are needed.
+
+---
+
+## 16. IMPLEMENTATION PHASES
+
+Follow this order.
+
+### Phase 1 — Inspection
+
+Inspect the frontend, authenticator, firmware, dependencies, and tests. Produce the integration report.
+
+### Phase 2 — Backend foundation
+
+Create the FastAPI application, health endpoint, configuration, logging, and test setup.
+
+Verify that the backend starts on Windows.
+
+### Phase 3 — Authenticator integration
+
+Integrate the actual Python verification logic and pass its existing tests.
+
+Add evidence-validation endpoints and test invalid and tampered records.
+
+### Phase 4 — Serial communication
+
+Implement port discovery, connection management, serial reading, protocol parsing, and reconnection handling.
+
+Test with a mocked serial device before connecting physical hardware.
+
+### Phase 5 — Local persistence
+
+Implement SQLite storage, measurement history, sessions, and verification records.
+
+Verify persistence after a backend restart.
+
+### Phase 6 — Frontend integration
+
+Use the screenshots and frontend source to connect the actual pages to the implemented API.
+
+Remove fake success responses and hardcoded dashboard metrics where backend data is expected.
+
+### Phase 7 — Physical hardware integration
+
+Connect the ESP32 through USB serial, verify the actual firmware protocol, test valid and tampered evidence, and troubleshoot hardware-specific failures.
+
+### Phase 8 — Final validation
+
+Run the test suite, security checks, and full end-to-end demonstration.
+
+Produce a clear list of working features, limitations, and remaining risks.
+
+---
+
+## 17. REQUIRED DEMONSTRATION
+
+The final demonstration should show this complete flow:
+
+1. Start the local backend and frontend.
+2. Connect the ESP32 to the laptop over USB serial.
+3. Display the correct COM-port connection status.
+4. Receive an actual sensor measurement.
+5. Validate the incoming evidence.
+6. Run HMAC verification using the existing authenticator.
+7. Store the measurement and verification result locally.
+8. Update the frontend dashboard and evidence history.
+9. Demonstrate a valid evidence record.
+10. Demonstrate tampered evidence being rejected.
+11. Demonstrate an unknown key or replay scenario where supported.
+12. Disconnect the ESP32 and show an accurate disconnected state.
+13. Restart the backend and demonstrate that previous evidence remains available.
+
+Clearly distinguish cryptographic verification, replay detection, device connectivity, and user authentication.
+
+Do not fake successful results to make the demonstration look complete.
+
+---
+
+## 18. STRICT WORKING RULES
+
+- Inspect before editing.
+- Back up or use Git before making substantial changes.
+- Never overwrite working code without understanding it.
+- Never change the HMAC protocol casually.
+- Never expose private keys.
+- Never use cloud services for the core data path.
+- Never assume the hardware is connected.
+- Never mark mock data as real data.
+- Never trust frontend-supplied verification results.
+- Never invent test results.
+- Never claim the application is secure merely because it uses HMAC.
+- Never generate the entire application in one uncontrolled change.
+- Keep the code understandable and maintainable.
+- Run tests after each meaningful implementation phase.
+- Report failures honestly and fix them before continuing.
+- Ask me for clarification only when an essential technical decision cannot be resolved from the files.
+
+For each phase, explain:
+
+1. What is being built.
+2. Why it is necessary.
+3. Which files are being created or changed.
+4. The important code decisions.
+5. How to run it on Windows.
+6. The expected result.
+7. The tests performed.
+8. Any remaining limitations.
+
+**Begin with Phase 1: inspect the repositories and produce the integration report. Do not start implementing the entire backend until the inspection is complete and I have supplied screenshots of the frontend pages.**

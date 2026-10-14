@@ -1,0 +1,77 @@
+## 19. SCREENSHOT-BASED FRONTEND INTEGRATION REQUIREMENTS
+
+I have supplied screenshots of the existing LabGuard frontend. Treat these screenshots as visual references, and treat the actual frontend source code as the authoritative implementation.
+
+Preserve the existing React, TypeScript, and Vite application, its visual design, navigation, charts, cards, and interactions unless a change is required for correct integration.
+
+The interface includes:
+
+1. Secure Access Portal.
+2. Main Dashboard.
+3. Recording Sessions.
+4. Evidence Verification.
+5. Record Inspection.
+6. Tampering Demonstration.
+7. Settings / About.
+
+For every screen:
+
+- Identify the corresponding frontend component and current data source.
+- Identify which displayed values are hardcoded, simulated, derived, or retrieved from the backend.
+- Define the API contract required by that screen.
+- Implement the corresponding backend functionality.
+- Connect the frontend to the actual endpoint.
+- Add loading, empty, error, disconnected, and successful states where appropriate.
+- Test the interaction from the browser through the backend.
+
+### Dashboard accuracy
+
+Never retain fabricated live statistics such as record counts, verification percentages, anomaly counts, ingestion rates, session tokens, or hardware connection states when presenting the system as live.
+
+Calculate statistics from persisted records and clearly identify their measurement period and denominator.
+
+For example, verified rate must be calculated using an explicitly defined population of processed records. It must not default to 100% when no records exist.
+
+Do not fabricate high-throughput measurements. If no meaningful ingestion-rate measurement exists, display an unavailable state instead.
+
+A successful backend health check does not establish that the ESP32 is connected. Serial connectivity, backend health, evidence authenticity, and user authentication must be represented separately.
+
+### Recording sessions and evidence
+
+Store session metadata and measurement history locally in SQLite.
+
+Maintain a clear distinction between:
+
+- Real hardware evidence received over USB serial.
+- Uploaded evidence files.
+- Explicitly simulated demonstration records.
+
+For uploaded evidence, verify the actual cryptographic format where supported. If a CSV record lacks the information required for cryptographic verification, report that limitation rather than declaring it authentic.
+
+Sequence continuity must be evaluated separately from HMAC validity.
+
+### Tampering demonstration
+
+Provide a deterministic test that takes a valid test fixture, modifies an authenticated field, retains the original authentication tag, and invokes the actual verifier.
+
+The expected result is a failed integrity check.
+
+Do not alter production evidence in place. Keep demonstration fixtures and demonstration outcomes separate from live hardware records.
+
+### Settings and security claims
+
+Inspect the supplied firmware and authenticator before displaying claims about secure boot, hardware enclaves, cryptographic compliance, or hardware-backed keys.
+
+Display only claims supported by actual implementation and available evidence. Otherwise, label the capability as unsupported, unverified, or not configured.
+
+### Local operation
+
+The entire core application must work without a cloud service:
+
+ESP32 → USB serial → Local FastAPI → SQLite → React frontend.
+
+The frontend must never communicate directly with the COM port. Browser API requests go to FastAPI, and the backend owns serial communication and cryptographic verification.
+
+After implementing each page, demonstrate that its displayed data comes from the appropriate backend endpoint. Document any remaining simulated functionality explicitly.
+
+Do not claim the integration is complete until the full workflow has been tested on Windows.

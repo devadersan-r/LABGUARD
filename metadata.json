@@ -1,0 +1,6 @@
+{
+  "name": "TRUEGUARD Secure Access Portal",
+  "description": "Cryptographically verified hardware telemetry login portal with HMAC-SHA256 integrity and tamper-evident records.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

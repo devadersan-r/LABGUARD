@@ -1,0 +1,101 @@
+A. Backend foundation
+[ ] FastAPI application starts without errors.
+[ ] All required Python dependencies are listed in requirements.txt or an equivalent lockfile.
+[ ] Configuration is separated from code using environment variables.
+[ ] Development and production configurations are separated.
+[ ] API documentation loads and lists the intended endpoints.
+[ ] Errors are logged clearly without exposing secrets or sensitive data.
+
+B. ESP32 and USB serial integration
+[ ] Backend lists available serial ports.
+[ ] Correct ESP32 port (previously COM9) can be selected and connected.
+[ ] Baud rate and serial settings match the ESP32 firmware.
+[ ] Serial reader handles incoming data continuously without freezing the API.
+[ ] Malformed, incomplete, empty and unexpected serial packets are handled safely.
+[ ] Disconnect, reconnect, device removal and timeout scenarios are handled.
+[ ] Only one reader owns a serial connection at a time.
+[ ] Packet counters and connection status reflect real events, not hard-coded values.
+[ ] Telemetry values are confirmed to originate from the actual sensors.
+
+C. HMAC-SHA256 and data integrity
+[ ] ESP32 and backend use the same documented message format and signing rules.
+[ ] Secret key is stored securely on the backend/device, never in frontend code.
+[ ] Backend recomputes the HMAC from the received message.
+[ ] Signature comparison uses hmac.compare_digest().
+[ ] Valid signed packets are accepted.
+[ ] Modified payload with the original signature is rejected.
+[ ] Invalid signatures, missing signatures and malformed packets are rejected.
+[ ] Invalid packets cannot update trusted telemetry or be stored as verified records.
+[ ] Verification results distinguish verified, rejected and unverified data.
+[ ] Replay or duplicate-message handling is defined if the system claims replay protection.
+[ ] Previously exposed test or production keys are rotated.
+
+D. Database and persistence
+[ ] Database schema and models match the data the frontend needs.
+[ ] Telemetry, verification results and relevant event/evidence records are stored as intended.
+[ ] Database writes occur only at the correct point in the verification workflow.
+[ ] Records include useful timestamps, device identity and verification status.
+[ ] Database operations handle errors and transactions safely.
+[ ] Data survives backend restart.
+[ ] Historical records can be retrieved through API endpoints.
+[ ] Retention, backup and recovery strategy is defined for production.
+[ ] Production deployment uses storage that persists across redeploys.
+
+E. API endpoints and business logic
+[ ] GET /api/serial/ports returns actual available ports.
+[ ] POST /api/serial/connect validates and opens the requested port.
+[ ] POST /api/serial/disconnect safely closes the connection.
+[ ] GET /api/serial/status reports accurate connection and packet statistics.
+[ ] GET /api/dashboard/latest returns real, correctly structured latest telemetry.
+[ ] GET /api/dashboard/stats returns statistics calculated from real records.
+[ ] Tamper status and simulation endpoints behave as documented.
+[ ] Evidence verification endpoint verifies the submitted evidence instead of merely returning a result.
+[ ] Endpoints validate request bodies, query parameters and data types.
+[ ] HTTP status codes and error messages are consistent and useful.
+[ ] Repeated requests do not create duplicate records or corrupt connection state.
+
+F. Login and access control
+[ ] Valid login succeeds and invalid credentials fail.
+[ ] Demo Access is clearly identified as demo-only, or is secured appropriately.
+[ ] Passwords are not stored as plaintext.
+[ ] Authentication uses a properly validated session or token mechanism.
+[ ] Protected endpoints reject unauthenticated requests.
+[ ] Users cannot access data or actions outside their permissions.
+[ ] Logout invalidates the relevant session or token where applicable.
+[ ] Forgot-password flow does not reveal whether an account exists.
+[ ] Authentication secrets and signing keys are not committed to GitHub.
+[ ] Production authentication has been tested independently of demo mode.
+
+G. Frontend-to-backend integration
+[ ] React frontend uses the actual FastAPI API for real data.
+[ ] API base URL is configurable and does not remain localhost in production.
+[ ] Frontend field names and backend response schemas match.
+[ ] Loading, disconnected, empty-data and API-error states are handled.
+[ ] Dashboard statistics and charts use backend responses, not unexplained mock data.
+[ ] Tamper alerts and checksum results correspond to actual verification results.
+[ ] Login, connection, telemetry, history and evidence flows work end to end.
+[ ] Browser console and Network tab show no unexplained failed API calls.
+
+H. Testing and consistency
+[ ] Existing unit tests pass.
+[ ] Serial integration tests cover success, disconnect and malformed packets.
+[ ] HMAC tests cover valid signatures and tampered payloads.
+[ ] Database tests cover writes, reads and restart persistence.
+[ ] API tests cover successful requests, invalid inputs and error cases.
+[ ] Authentication and protected-route tests pass.
+[ ] End-to-end test confirms real ESP32 data reaches the dashboard.
+[ ] Displayed metrics agree with underlying records and verification outcomes.
+[ ] Test/demo data is clearly separated from live production data.
+[ ] Anomalies, checksum failures and inconsistent viability percentages have been investigated.
+
+I. Deployment and security
+[ ] FastAPI backend is deployed to a Python-capable host.
+[ ] Frontend production build succeeds.
+[ ] CORS allows only the intended frontend origins.
+[ ] Production secrets are configured through host environment settings.
+[ ] HTTPS is used for browser-to-backend communication.
+[ ] Database storage and migrations are configured for production.
+[ ] Health-check endpoint and useful production logs are available.
+[ ] Debug mode and overly detailed error output are disabled in production.
+[ ] Dependencies are reviewed and updated as appropriate.
+[ ] Cloud deployment limitations for USB serial hardware are handled explicitly.
