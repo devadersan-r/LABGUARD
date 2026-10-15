@@ -200,26 +200,42 @@ def google_auth(req: GoogleAuthRequest, db: Session = Depends(get_db)):
 
     user = db.query(User).filter(User.email.ilike(email)).first()
     if not user:
-        # User is registering via Google: user MUST create and confirm their password!
-        if not req.password:
+        # User is registering via Google
+        if req.credential:
+            # Authorized and verified directly via Google account
+            generated_key = secrets.token_urlsafe(32) + "Aa1!"
+            hashed = hash_password(generated_key)
+            user = User(
+                email=email,
+                hashed_password=hashed,
+                role="Hardware Telemetry Engineer",
+                facility="Chamber Alpha-7 (ESP32 Gateway)",
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+        elif req.password:
+            validate_strong_password(req.password, req.confirm_password or "")
+            hashed = hash_password(req.password)
+            user = User(
+                email=email,
+                hashed_password=hashed,
+                role="Hardware Telemetry Engineer",
+                facility="Chamber Alpha-7 (ESP32 Gateway)",
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+        else:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Please create a strong password to finalize registration for this Google account.",
             )
-        validate_strong_password(req.password, req.confirm_password or "")
-        hashed = hash_password(req.password)
-        user = User(
-            email=email,
-            hashed_password=hashed,
-            role="Hardware Telemetry Engineer",
-            facility="Chamber Alpha-7 (ESP32 Gateway)",
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
     else:
-        # Existing user logging in: if password is provided, verify it
-        if req.password:
+        # Existing user logging in: if verified via Google credential, accept directly
+        if req.credential:
+            pass
+        elif req.password:
             if not verify_password(user.hashed_password, req.password):
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,

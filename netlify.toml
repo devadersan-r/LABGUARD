@@ -3,6 +3,13 @@
   publish = "dist"
 
 [[redirects]]
+  from = "/api/*"
+  to = "https://labguard-api-g8o2.onrender.com/api/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
+
