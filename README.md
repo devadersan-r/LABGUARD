@@ -18,3 +18,8 @@ View your app in AI Studio: https://ai.studio/apps/308473ce-b53a-409e-8f33-5324e
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+# LABGUARD — Secure Hardware Telemetry & Evidence Integrity
+
+**Live Website:** [https://labguard-evidence-system.netlify.app/](https://labguard-evidence-system.netlify.app/)
+
+**Backend API:** [https://labguard-api-g8o2.onrender.com](https://labguard-api-g8o2.onrender.com) · [API Documentation](https://labguard-api-g8o2.onrender.com/docs)
