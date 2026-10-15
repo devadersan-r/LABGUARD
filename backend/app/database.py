@@ -35,6 +35,8 @@ engine_options = {"pool_pre_ping": True}
 
 if is_sqlite:
     engine_options["connect_args"] = {"check_same_thread": False}
+else:
+    engine_options["connect_args"] = {"sslmode": "require"}
 
 engine = create_engine(db_url, **engine_options)
 

@@ -14,10 +14,17 @@ from backend.app.services.authenticator_service import authenticator_service
 from backend.app.services.serial_service import serial_service
 from backend.app.services.session_service import session_service
 
+from backend.app.core.security import hash_password
+
 @pytest.fixture(scope="module")
 def client():
-    init_db()
     with TestClient(app) as test_client:
+        # Register a valid operator for auth tests
+        test_client.post("/api/auth/register", json={
+            "email": "operator.alex@labguard.io",
+            "password": "StrongKey@2026!",
+            "confirm_password": "StrongKey@2026!",
+        })
         yield test_client
 
 def test_health_check(client):
@@ -39,19 +46,19 @@ def test_system_info(client):
 def test_auth_login_valid(client):
     """Test user login with valid credentials."""
     payload = {
-        "identifier": "telemetry.lead@labguard.io",
-        "password": "lg_demo_key_2026",
+        "identifier": "operator.alex@labguard.io",
+        "password": "StrongKey@2026!",
     }
     res = client.post("/api/auth/login", json=payload)
     assert res.status_code == 200
     data = res.json()
-    assert data["email"] == "telemetry.lead@labguard.io"
+    assert data["email"] == "operator.alex@labguard.io"
     assert data["sessionToken"].startswith("lg_sess_")
 
 def test_auth_login_invalid(client):
     """Test user login with invalid password."""
     payload = {
-        "identifier": "telemetry.lead@labguard.io",
+        "identifier": "operator.alex@labguard.io",
         "password": "wrong_password_attempt",
     }
     res = client.post("/api/auth/login", json=payload)
@@ -61,15 +68,15 @@ def test_auth_login_invalid(client):
 def test_auth_me_and_logout(client):
     """Test protected /me endpoint with token and subsequent logout."""
     login_res = client.post("/api/auth/login", json={
-        "identifier": "telemetry.lead@labguard.io",
-        "password": "lg_demo_key_2026",
+        "identifier": "operator.alex@labguard.io",
+        "password": "StrongKey@2026!",
     })
     token = login_res.json()["sessionToken"]
 
     # Access /me
     me_res = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert me_res.status_code == 200
-    assert me_res.json()["email"] == "telemetry.lead@labguard.io"
+    assert me_res.json()["email"] == "operator.alex@labguard.io"
 
     # Logout
     logout_res = client.post("/api/auth/logout", headers={"Authorization": f"Bearer {token}"})

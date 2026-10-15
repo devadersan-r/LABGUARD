@@ -7,8 +7,22 @@ sys.path.insert(0, str(root))
 
 from fastapi.testclient import TestClient
 from backend.app.main import app
+from backend.app.database import SessionLocal
+from backend.app.models import User, UserSession
 
 def run_tests():
+    # Ensure test accounts are wiped before running tests
+    db = SessionLocal()
+    try:
+        test_emails = ['operator.alex@labguard.io', 'new.user@gmail.com']
+        users = db.query(User).filter(User.email.in_(test_emails)).all()
+        for u in users:
+            db.query(UserSession).filter(UserSession.user_id == u.id).delete()
+            db.delete(u)
+        db.commit()
+    finally:
+        db.close()
+
     client = TestClient(app)
 
     print('--- Test 1: Old Dummy Account Login Rejected ---')
