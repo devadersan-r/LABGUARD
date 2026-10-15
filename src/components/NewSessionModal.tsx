@@ -179,10 +179,11 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
             </button>
             <button
               type="submit"
-              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#087EE8] to-[#168BFF] hover:from-[#168BFF] hover:to-[#0866D4] text-white text-xs font-bold flex items-center gap-2 shadow-md shadow-blue-500/20 transition-all cursor-pointer active:scale-95"
+              disabled={isSubmitting}
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#087EE8] to-[#168BFF] hover:from-[#168BFF] hover:to-[#0866D4] text-white text-xs font-bold flex items-center gap-2 shadow-md shadow-blue-500/20 transition-all cursor-pointer active:scale-95 disabled:opacity-50"
             >
-              <Plus className="w-4 h-4" />
-              <span>Create Session</span>
+              <Plus className={`w-4 h-4 ${isSubmitting ? 'animate-spin' : ''}`} />
+              <span>{isSubmitting ? 'Initializing...' : '+ Create Session'}</span>
             </button>
           </div>
         </form>

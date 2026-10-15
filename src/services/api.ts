@@ -3,7 +3,8 @@ import { RecordingSession } from '../data/sampleSessions';
 import { VerificationReport } from '../components/EvidenceVerificationView';
 import { TelemetryPoint } from '../components/TelemetryGraph';
 
-const API_BASE = '/api';
+// Centralized API Base URL configurable via VITE_API_BASE_URL (defaults to Vite proxy /api)
+const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || '/api';
 
 function getAuthHeader(): Record<string, string> {
   const token = localStorage.getItem('lg_session_token');
@@ -12,15 +13,15 @@ function getAuthHeader(): Record<string, string> {
 
 export interface DashboardStats {
   hardwareConnected: boolean;
-  activeSessionId?: string;
-  viabilityScore: number;
+  activeSessionId?: string | null;
+  viabilityScore?: number | null;
   totalRecords: number;
-  dataIntegrityScore: number;
+  dataIntegrityScore?: number | null;
   anomalyCount: number;
   throughput: number;
   lastChecksumStatus: string;
   enclaveHashMatch: boolean;
-  connectedSince?: string;
+  connectedSince?: string | null;
   measurementPeriod: string;
   recordsDenominator: number;
 }
@@ -53,6 +54,30 @@ export interface TamperStatus {
   verifiedStatus: string;
   nonce: number;
   lastCheckTime: string;
+  sessionId?: string;
+  recordedStatus?: string;
+}
+
+export interface NotificationStatus {
+  configured: boolean;
+  provider: string;
+  host: string;
+  port: number;
+  fromEmail: string;
+  alertRecipient: string;
+  tlsEnabled: boolean;
+  totalAlertsSent: number;
+  lastAlertTime: string | null;
+  lastAlertStatus: string;
+  lastErrorMessage: string | null;
+  cooldownSeconds: number;
+}
+
+export interface TestEmailResponse {
+  success: boolean;
+  message: string;
+  recipient: string;
+  timestamp: string;
 }
 
 export interface SystemInfo {
@@ -83,12 +108,80 @@ export const api = {
     return data;
   },
 
+  async register(email: string, password: string, confirmPassword: string): Promise<UserSession> {
+    const res = await fetch(`${API_BASE}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        password,
+        confirm_password: confirmPassword,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Account creation failed' }));
+      throw new Error(err.detail || 'Account creation failed');
+    }
+    const data = await res.json();
+    localStorage.setItem('lg_session_token', data.sessionToken);
+    return data;
+  },
+
+  async checkEmail(email: string): Promise<{ email: string; exists: boolean }> {
+    const res = await fetch(`${API_BASE}/auth/check-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    if (!res.ok) {
+      throw new Error('Failed to verify email account status');
+    }
+    return res.json();
+  },
+
+  async googleAuth(
+    email: string,
+    password?: string,
+    confirmPassword?: string,
+    name?: string,
+    credential?: string
+  ): Promise<UserSession> {
+    const res = await fetch(`${API_BASE}/auth/google`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        password,
+        confirm_password: confirmPassword,
+        name,
+        credential,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Google authentication failed' }));
+      throw new Error(err.detail || 'Google authentication failed');
+    }
+    const data = await res.json();
+    localStorage.setItem('lg_session_token', data.sessionToken);
+    return data;
+  },
+
   async logout(): Promise<void> {
     await fetch(`${API_BASE}/auth/logout`, {
       method: 'POST',
       headers: { ...getAuthHeader() },
     }).catch(() => {});
     localStorage.removeItem('lg_session_token');
+  },
+
+  async getMe(): Promise<UserSession> {
+    const res = await fetch(`${API_BASE}/auth/me`, {
+      headers: { ...getAuthHeader() },
+    });
+    if (!res.ok) {
+      throw new Error('Invalid or expired session');
+    }
+    return res.json();
   },
 
   async forgotPassword(email: string): Promise<{ success: boolean; message: string; recoveryToken?: string }> {
@@ -119,6 +212,14 @@ export const api = {
 
   async triggerDeepScan(): Promise<any> {
     const res = await fetch(`${API_BASE}/dashboard/scan`, {
+      method: 'POST',
+      headers: { ...getAuthHeader() },
+    });
+    return res.json();
+  },
+
+  async resetToZeroBaseline(): Promise<any> {
+    const res = await fetch(`${API_BASE}/dashboard/reset`, {
       method: 'POST',
       headers: { ...getAuthHeader() },
     });
@@ -192,6 +293,10 @@ export const api = {
     return res.json();
   },
 
+  getSampleDownloadUrl(sampleType: 'clean' | 'tampered'): string {
+    return `${API_BASE}/evidence/sample/${sampleType}/download`;
+  },
+
   // Tampering Demo
   async getTamperStatus(): Promise<TamperStatus> {
     const res = await fetch(`${API_BASE}/tamper/status`, {
@@ -201,13 +306,35 @@ export const api = {
     return res.json();
   },
 
-  async simulateTamper(tamperPayload: boolean): Promise<TamperStatus> {
+  async simulateTamper(tamperPayload: boolean, sessionId?: string): Promise<TamperStatus> {
     const res = await fetch(`${API_BASE}/tamper/simulate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
-      body: JSON.stringify({ tamperPayload }),
+      body: JSON.stringify({ tamperPayload, sessionId }),
     });
     if (!res.ok) throw new Error('Failed to toggle tamper simulation');
+    return res.json();
+  },
+
+  // Notifications & SMTP Alerts
+  async getNotificationStatus(): Promise<NotificationStatus> {
+    const res = await fetch(`${API_BASE}/notifications/status`, {
+      headers: { ...getAuthHeader() },
+    });
+    if (!res.ok) throw new Error('Failed to load notification status');
+    return res.json();
+  },
+
+  async sendTestEmail(recipient?: string): Promise<TestEmailResponse> {
+    const res = await fetch(`${API_BASE}/notifications/test-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+      body: JSON.stringify({ recipient }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to dispatch test email' }));
+      throw new Error(err.detail || 'Failed to dispatch test email');
+    }
     return res.json();
   },
 
@@ -254,6 +381,10 @@ export const api = {
       method: 'POST',
       headers: { ...getAuthHeader() },
     });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to disconnect serial port' }));
+      throw new Error(err.detail || 'Failed to disconnect serial port');
+    }
     return res.json();
   },
 
@@ -263,6 +394,10 @@ export const api = {
       headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
       body: JSON.stringify({ active, intervalSeconds: 2.0 }),
     });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to toggle simulator' }));
+      throw new Error(err.detail || 'Failed to toggle simulator');
+    }
     return res.json();
   },
 };

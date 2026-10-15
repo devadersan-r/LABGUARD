@@ -191,7 +191,8 @@ export const EvidenceVerificationView: React.FC = () => {
       }
 
       if (records.length === 0) {
-        CLEAN_SAMPLE_RECORDS.forEach((r) => records.push({ ...r }));
+        setUploadError(`No valid telemetry records found in ${fileName}. Please check that the file contains canonical labguard-v1 JSONL or CSV rows.`);
+        return;
       }
 
       setSelectedFile({
@@ -314,25 +315,16 @@ export const EvidenceVerificationView: React.FC = () => {
     }
   };
 
-  // Download Sample File Button (Header action)
+  // Download Sample File Button (Header action: fetches authentic JSONL evidence file)
   const handleDownloadSampleFile = () => {
-    const csvContent = [
-      'Sequence,Timestamp,Device,Channel,Value,HMAC_SHA256_Digest',
-      '1,17:45:02,ESP32-LAB-01,TEMP_CH0,24.2 °C,7a29f0e1d84f09a12c',
-      '2,17:48:40,ESP32-LAB-01,TEMP_CH0,24.5 °C,8b11c2a04f9b4c02e1',
-      '3,17:52:15,ESP32-LAB-01,TEMP_CH0,24.6 °C,4c88a999bc4512da88',
-      '4,17:56:00,ESP32-LAB-01,TEMP_CH0,24.8 °C,90ea1255ee7830ff77',
-      '5,18:00:22,ESP32-LAB-01,TEMP_CH0,24.6 °C,66fe4222dd9167aa66',
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
+    const downloadUrl = api.getSampleDownloadUrl('clean');
     const link = document.createElement('a');
-    link.href = url;
-    link.download = 'LABGUARD_Sample_Evidence_Package.csv';
+    link.href = downloadUrl;
+    link.download = 'LABGUARD_Clean_Export_2026.jsonl';
+    document.body.appendChild(link);
     link.click();
-    URL.revokeObjectURL(url);
-    showToast('Downloaded sample evidence package CSV.');
+    document.body.removeChild(link);
+    showToast('Downloaded authentic sample JSONL evidence file from backend.');
   };
 
   // Export Verification Report Button

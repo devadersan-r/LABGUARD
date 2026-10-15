@@ -3,7 +3,8 @@ from pydantic import BaseModel, Field
 
 # ==================== Auth Schemas ====================
 class LoginRequest(BaseModel):
-    identifier: str = Field(..., description="User email or username")
+    identifier: Optional[str] = None
+    email: Optional[str] = None
     password: str = Field(..., description="Access password")
 
 class UserOut(BaseModel):
@@ -20,6 +21,25 @@ class ForgotPasswordResponse(BaseModel):
     success: bool
     message: str
     recoveryToken: Optional[str] = None
+
+class RegisterRequest(BaseModel):
+    email: str = Field(..., description="Valid operator email address")
+    password: str = Field(..., description="Strong user password")
+    confirm_password: str = Field(..., description="Password confirmation")
+
+class GoogleAuthRequest(BaseModel):
+    email: str = Field(..., description="Google account email")
+    name: Optional[str] = None
+    credential: Optional[str] = None
+    password: Optional[str] = None
+    confirm_password: Optional[str] = None
+
+class EmailCheckRequest(BaseModel):
+    email: str
+
+class EmailCheckResponse(BaseModel):
+    email: str
+    exists: bool
 
 # ==================== Serial Schemas ====================
 class SerialPortInfo(BaseModel):
@@ -38,6 +58,7 @@ class SerialStatusResponse(BaseModel):
     lastPacketTime: Optional[str] = None
     lastError: Optional[str] = None
     simulatorActive: bool
+    throughput: int = 0
 
 class SerialConnectRequest(BaseModel):
     port: str
@@ -59,9 +80,9 @@ class TelemetryPointOut(BaseModel):
 class DashboardStatsResponse(BaseModel):
     hardwareConnected: bool
     activeSessionId: Optional[str] = None
-    viabilityScore: float
+    viabilityScore: Optional[float] = None
     totalRecords: int
-    dataIntegrityScore: float
+    dataIntegrityScore: Optional[float] = None
     anomalyCount: int
     throughput: int
     lastChecksumStatus: str
@@ -140,10 +161,37 @@ class TamperStatusResponse(BaseModel):
     verifiedStatus: str  # 'VERIFIED' | 'TAMPERED_MISMATCH'
     nonce: int
     lastCheckTime: str
+    sessionId: Optional[str] = "SESSION-TAMPER-DEMO"
+    recordedStatus: Optional[str] = None
 
 class TamperSimulateRequest(BaseModel):
     tamperPayload: bool = True
     customValue: Optional[float] = None
+    sessionId: Optional[str] = None
+
+# ==================== Notification / Email Schemas ====================
+class NotificationStatusResponse(BaseModel):
+    configured: bool
+    provider: str
+    host: str
+    port: int
+    fromEmail: str
+    alertRecipient: str
+    tlsEnabled: bool
+    totalAlertsSent: int
+    lastAlertTime: Optional[str] = None
+    lastAlertStatus: str
+    lastErrorMessage: Optional[str] = None
+    cooldownSeconds: int
+
+class TestEmailRequest(BaseModel):
+    recipient: Optional[str] = None
+
+class TestEmailResponse(BaseModel):
+    success: bool
+    message: str
+    recipient: str
+    timestamp: str
 
 # ==================== System Schemas ====================
 class SystemInfoResponse(BaseModel):

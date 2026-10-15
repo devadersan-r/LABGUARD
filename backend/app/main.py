@@ -29,6 +29,15 @@ async def lifespan(app: FastAPI):
     serial_service.on_record_received = session_service.record_incoming_telemetry
     logger.info("Connected serial receiver to database persistence engine.")
 
+    # Initialize demo session so it is immediately inspectable
+    from backend.app.services.tamper_service import tamper_service
+    from backend.app.services.email_service import email_service
+    tamper_service.ensure_demo_session_initialized()
+    if email_service.is_configured():
+        logger.info(f"Gmail SMTP alert service active (STARTTLS): alerts directed to {settings.TAMPER_ALERT_TO}")
+    else:
+        logger.info("Gmail SMTP alert service ready (offline mode: App Password placeholder present in backend/.env).")
+
     yield
 
     # Shutdown sequence

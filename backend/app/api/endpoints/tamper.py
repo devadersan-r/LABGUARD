@@ -16,14 +16,16 @@ def get_tamper_demo_status():
         verifiedStatus=data["verifiedStatus"],
         nonce=data["nonce"],
         lastCheckTime=data["lastCheckTime"],
+        sessionId=data.get("sessionId", "SESSION-TAMPER-DEMO"),
+        recordedStatus=data.get("recordedStatus"),
     )
 
 @router.post("/simulate", response_model=TamperStatusResponse)
 def simulate_tamper(req: TamperSimulateRequest):
     """Execute a deterministic tampering demonstration by altering an authenticated payload field,
-    retaining original tag, and executing the real verifier.
+    retaining original tag, persisting to the database for Record Inspection, and executing the real verifier.
     """
-    data = tamper_service.simulate_tamper(req.tamperPayload)
+    data = tamper_service.simulate_tamper(req.tamperPayload, session_id=req.sessionId)
     return TamperStatusResponse(
         isTampered=data["isTampered"],
         payloadText=data["payloadText"],
@@ -32,4 +34,6 @@ def simulate_tamper(req: TamperSimulateRequest):
         verifiedStatus=data["verifiedStatus"],
         nonce=data["nonce"],
         lastCheckTime=data["lastCheckTime"],
+        sessionId=data.get("sessionId", "SESSION-TAMPER-DEMO"),
+        recordedStatus=data.get("recordedStatus"),
     )

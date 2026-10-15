@@ -7,6 +7,7 @@ from backend.app.api.endpoints import (
     evidence,
     tamper,
     system,
+    notifications,
 )
 
 api_router = APIRouter(prefix="/api")
@@ -18,3 +19,4 @@ api_router.include_router(dashboard.router)
 api_router.include_router(sessions.router)
 api_router.include_router(evidence.router)
 api_router.include_router(tamper.router)
+api_router.include_router(notifications.router)

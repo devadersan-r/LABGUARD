@@ -1,4 +1,5 @@
 import datetime
+import re
 import secrets
 from fastapi import APIRouter, Depends, HTTPException, Header, status
 from sqlalchemy.orm import Session
@@ -10,9 +11,61 @@ from backend.app.schemas import (
     UserOut,
     ForgotPasswordRequest,
     ForgotPasswordResponse,
+    RegisterRequest,
+    GoogleAuthRequest,
+    EmailCheckRequest,
+    EmailCheckResponse,
 )
-from backend.app.core.security import verify_password, generate_session_token
+from backend.app.core.security import hash_password, verify_password, generate_session_token
 from backend.app.core.config import settings
+
+EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
+
+def validate_email_format(email: str) -> str:
+    cleaned = (email or "").strip().lower()
+    if not cleaned or not EMAIL_REGEX.match(cleaned):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Please provide a valid email address.",
+        )
+    return cleaned
+
+def validate_strong_password(password: str, confirm_password: str):
+    if not password:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Password is required.",
+        )
+    if len(password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Password must be at least 8 characters long.",
+        )
+    if not re.search(r"[A-Z]", password):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Password must contain at least one uppercase letter (A-Z).",
+        )
+    if not re.search(r"[a-z]", password):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Password must contain at least one lowercase letter (a-z).",
+        )
+    if not re.search(r"[0-9]", password):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Password must contain at least one numeric digit (0-9).",
+        )
+    if not re.search(r"[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?~`]", password):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Password must contain at least one special character (!@#$%^&*...).",
+        )
+    if password != confirm_password:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Confirm password does not match the created password.",
+        )
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -44,17 +97,134 @@ def get_current_user(
 @router.post("/login", response_model=UserOut)
 def login(req: LoginRequest, db: Session = Depends(get_db)):
     """Authenticate human operator via email/username and Argon2id hashed password."""
-    # Lookup by email
-    user = db.query(User).filter(User.email == req.identifier.strip()).first()
+    ident = (req.identifier or req.email or "").strip().lower()
+    if not ident:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Email or identifier is required.",
+        )
+
+    # Lookup by email (case-insensitive)
+    user = db.query(User).filter(User.email.ilike(ident)).first()
     if not user:
         # Check if username without domain was supplied
-        user = db.query(User).filter(User.email.startswith(req.identifier.strip() + "@")).first()
+        user = db.query(User).filter(User.email.ilike(ident + "@%")).first()
 
     if not user or not verify_password(user.hashed_password, req.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials. Please verify your email and password.",
         )
+
+    # Issue session token
+    token = generate_session_token()
+    now_utc = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    expires = now_utc + datetime.timedelta(seconds=settings.SESSION_EXPIRE_SECONDS)
+    user_session = UserSession(
+        token=token,
+        user_id=user.id,
+        expires_at=expires,
+        is_active=True,
+    )
+    db.add(user_session)
+    db.commit()
+
+    now_time = datetime.datetime.now().strftime("%I:%M %p")
+    return UserOut(
+        email=user.email,
+        role=user.role,
+        facility=user.facility,
+        sessionToken=token,
+        loginTime=now_time,
+    )
+
+@router.post("/register", response_model=UserOut)
+def register(req: RegisterRequest, db: Session = Depends(get_db)):
+    """Register a new human operator with valid email and strong password."""
+    email = validate_email_format(req.email)
+    validate_strong_password(req.password, req.confirm_password)
+
+    # Check if user already exists
+    existing = db.query(User).filter(User.email.ilike(email)).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this email address already exists. Please sign in.",
+        )
+
+    # Hash strong password
+    hashed = hash_password(req.password)
+    user = User(
+        email=email,
+        hashed_password=hashed,
+        role="Hardware Telemetry Engineer",
+        facility="Chamber Alpha-7 (ESP32 Gateway)",
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    # Issue session token
+    token = generate_session_token()
+    now_utc = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    expires = now_utc + datetime.timedelta(seconds=settings.SESSION_EXPIRE_SECONDS)
+    user_session = UserSession(
+        token=token,
+        user_id=user.id,
+        expires_at=expires,
+        is_active=True,
+    )
+    db.add(user_session)
+    db.commit()
+
+    now_time = datetime.datetime.now().strftime("%I:%M %p")
+    return UserOut(
+        email=user.email,
+        role=user.role,
+        facility=user.facility,
+        sessionToken=token,
+        loginTime=now_time,
+    )
+
+@router.post("/check-email", response_model=EmailCheckResponse)
+def check_email(req: EmailCheckRequest, db: Session = Depends(get_db)):
+    """Check if an email account is already registered."""
+    email = validate_email_format(req.email)
+    existing = db.query(User).filter(User.email.ilike(email)).first()
+    return EmailCheckResponse(email=email, exists=bool(existing))
+
+@router.post("/google", response_model=UserOut)
+def google_auth(req: GoogleAuthRequest, db: Session = Depends(get_db)):
+    """Authenticate or register user via Google account with required authorization and strong password."""
+    email = validate_email_format(req.email)
+
+    user = db.query(User).filter(User.email.ilike(email)).first()
+    if not user:
+        # User is registering via Google: user MUST create and confirm their password!
+        if not req.password:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Please create a strong password to finalize registration for this Google account.",
+            )
+        validate_strong_password(req.password, req.confirm_password or "")
+        hashed = hash_password(req.password)
+        user = User(
+            email=email,
+            hashed_password=hashed,
+            role="Hardware Telemetry Engineer",
+            facility="Chamber Alpha-7 (ESP32 Gateway)",
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    else:
+        # Existing user logging in: if password is provided, verify it
+        if req.password:
+            if not verify_password(user.hashed_password, req.password):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid password for this registered Google account.",
+                )
 
     # Issue session token
     token = generate_session_token()
@@ -104,7 +274,8 @@ def get_me(user: User = Depends(get_current_user), authorization: str = Header(N
 @router.post("/forgot-password", response_model=ForgotPasswordResponse)
 def forgot_password(req: ForgotPasswordRequest, db: Session = Depends(get_db)):
     """Offline local password reset token dispatch."""
-    user = db.query(User).filter(User.email == req.email.strip()).first()
+    email = req.email.strip().lower()
+    user = db.query(User).filter(User.email.ilike(email)).first()
     if not user:
         return ForgotPasswordResponse(
             success=False,

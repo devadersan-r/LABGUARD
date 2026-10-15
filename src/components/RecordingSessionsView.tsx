@@ -28,7 +28,7 @@ export const RecordingSessionsView: React.FC<RecordingSessionsViewProps> = ({
   onNavigateToInspection,
 }) => {
   // Application State
-  const [sessions, setSessions] = useState<RecordingSession[]>(INITIAL_SESSIONS);
+  const [sessions, setSessions] = useState<RecordingSession[]>([]);
   const [selectedSession, setSelectedSession] = useState<RecordingSession | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
   const [isNewModalOpen, setIsNewModalOpen] = useState<boolean>(false);
@@ -50,7 +50,7 @@ export const RecordingSessionsView: React.FC<RecordingSessionsViewProps> = ({
         status: statusFilter,
         source: sourceFilter,
       });
-      if (data && data.length > 0) {
+      if (Array.isArray(data)) {
         setSessions(data);
       }
     } catch (err) {
@@ -60,6 +60,8 @@ export const RecordingSessionsView: React.FC<RecordingSessionsViewProps> = ({
 
   React.useEffect(() => {
     loadSessions();
+    const interval = setInterval(loadSessions, 4000);
+    return () => clearInterval(interval);
   }, [loadSessions]);
 
   // Pagination State
@@ -180,14 +182,28 @@ export const RecordingSessionsView: React.FC<RecordingSessionsViewProps> = ({
           </p>
         </div>
 
-        {/* Primary Action Button: + New Session */}
-        <button
-          onClick={() => setIsNewModalOpen(true)}
-          className="self-start sm:self-auto px-5 py-2.5 bg-gradient-to-r from-[#087EE8] to-[#168BFF] hover:from-[#168BFF] hover:to-[#0866D4] text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-md shadow-blue-500/20 transition-all cursor-pointer active:scale-95 shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          <span>+ New Session</span>
-        </button>
+        {/* Action Buttons: Refresh and + New Session */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              loadSessions();
+              showToast('Refreshed sessions list.');
+            }}
+            className="px-3.5 py-2.5 bg-white hover:bg-[#F4FBFF] text-[#082F61] border border-[#C9EAF7] text-xs font-bold rounded-xl flex items-center gap-2 shadow-xs transition-all cursor-pointer active:scale-95"
+            title="Refresh Sessions"
+          >
+            <RotateCcw className="w-4 h-4 text-[#087EE8]" />
+            <span>Refresh</span>
+          </button>
+
+          <button
+            onClick={() => setIsNewModalOpen(true)}
+            className="self-start sm:self-auto px-5 py-2.5 bg-gradient-to-r from-[#087EE8] to-[#168BFF] hover:from-[#168BFF] hover:to-[#0866D4] text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-md shadow-blue-500/20 transition-all cursor-pointer active:scale-95 shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            <span>+ New Session</span>
+          </button>
+        </div>
       </div>
 
       {/* Compact Informational Banner */}
@@ -502,14 +518,22 @@ export const RecordingSessionsView: React.FC<RecordingSessionsViewProps> = ({
                     <div className="w-10 h-10 rounded-full bg-[#F4FBFF] border border-[#C9EAF7] flex items-center justify-center mx-auto text-[#58758D]">
                       <Search className="w-5 h-5" />
                     </div>
-                    <p className="text-sm font-bold text-[#082F61]">No matching recording sessions found</p>
-                    <p className="text-xs">Try adjusting your search criteria or resetting filters.</p>
-                    <button
-                      onClick={handleResetFilters}
-                      className="mt-2 text-xs text-[#087EE8] font-bold hover:underline cursor-pointer"
-                    >
-                      Reset All Filters
-                    </button>
+                    <p className="text-sm font-bold text-[#082F61]">
+                      {totalSessionsCount === 0 ? 'No Recording Sessions in Database' : 'No matching recording sessions found'}
+                    </p>
+                    <p className="text-xs">
+                      {totalSessionsCount === 0 
+                        ? 'Connect ESP32 hardware or create a new session to begin recording evidence.' 
+                        : 'Try adjusting your search criteria or resetting filters.'}
+                    </p>
+                    {totalSessionsCount > 0 && (
+                      <button
+                        onClick={handleResetFilters}
+                        className="mt-2 text-xs text-[#087EE8] font-bold hover:underline cursor-pointer"
+                      >
+                        Reset All Filters
+                      </button>
+                    )}
                   </td>
                 </tr>
               )}

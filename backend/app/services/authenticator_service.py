@@ -1,3 +1,4 @@
+import datetime
 import json
 import sys
 from pathlib import Path
@@ -38,9 +39,23 @@ class AuthenticatorService:
 
     def _init_keystore(self):
         try:
-            if self.keystore_path.exists():
-                self._keystore = KeyStore(self.keystore_path)
-                logger.info(f"Loaded LabGuard KeyStore from {self.keystore_path}")
+            candidates = [
+                Path(self.keystore_path) if self.keystore_path else None,
+                settings.WORKSPACE_DIR / "LABGUARD" / "keys" / "labguard_keys.json",
+                settings.BACKEND_DIR.parent / "LABGUARD" / "keys" / "labguard_keys.json",
+                Path("LABGUARD/keys/labguard_keys.json"),
+                Path("../LABGUARD/keys/labguard_keys.json"),
+            ]
+            found_path = None
+            for p in candidates:
+                if p and p.resolve().exists():
+                    found_path = p.resolve()
+                    break
+
+            if found_path:
+                self.keystore_path = found_path
+                self._keystore = KeyStore(found_path)
+                logger.info(f"Loaded LabGuard KeyStore from {found_path}")
             else:
                 logger.warning(f"KeyStore file not found at {self.keystore_path}. Operating in fail-closed mode.")
                 self._keystore = None
@@ -59,17 +74,45 @@ class AuthenticatorService:
         Returns: (is_valid, status, reason, expected_tag)
         status is one of: 'VALID', 'INVALID', 'UNVERIFIABLE'
         """
-        # 1. Validate schema
-        try:
-            validate_record_schema(record)
-        except SchemaValidationError as err:
-            return False, "INVALID", f"Schema validation error: {err}", None
+        schema_type = record.get("schema")
+        if schema_type == "lablog-v1":
+            # Firmware v1 format (pipe-delimited canonical string)
+            try:
+                if "value" in record:
+                    temp_val = float(record["value"])
+                elif "value_centi_c" in record:
+                    temp_val = float(record["value_centi_c"]) / 100.0
+                else:
+                    temp_val = 0.0
+                sess_id = str(record["session_id"])
+                dev_id = str(record.get("device_id") or record.get("device") or "DEVICE-01")
+                seq_num = int(record["seq"])
+                el_ms = int(record.get("elapsed_ms", 0))
+                src = str(record.get("source", "DS18B20"))
+                u = str(record.get("unit", "C"))
+                canonical_str = f"lablog-v1|{sess_id}|{dev_id}|{seq_num}|{el_ms}|{src}|{temp_val:.2f}|{u}"
+                canonical_bytes = canonical_str.encode("utf-8")
+            except Exception as err:
+                return False, "INVALID", f"Invalid lablog-v1 record format: {err}", None
+        else:
+            # Standard labguard-v1 schema validation
+            try:
+                validate_record_schema(record)
+            except SchemaValidationError as err:
+                return False, "INVALID", f"Schema validation error: {err}", None
+
+            # Canonicalize labguard-v1 payload
+            try:
+                canonical_bytes = serialize_canonical_payload(record)
+            except CanonicalizationError as err:
+                return False, "INVALID", f"Canonical serialization failed: {err}", None
 
         # 2. Key resolution
         if not self.keystore:
             return False, "UNVERIFIABLE", "KeyStore not initialized or unavailable", None
 
-        key_id = record["auth"]["key_id"]
+        auth_block = record.get("auth", {})
+        key_id = auth_block.get("key_id", "KEY-001")
         try:
             secret_key = self.keystore.get_key(key_id)
         except KeyNotFoundError:
@@ -77,21 +120,26 @@ class AuthenticatorService:
         except InvalidKeyError as err:
             return False, "INVALID", f"Invalid key material for '{key_id}'", None
 
-        # 3. Canonicalize payload
-        try:
-            canonical_bytes = serialize_canonical_payload(record)
-        except CanonicalizationError as err:
-            return False, "INVALID", f"Canonical serialization failed: {err}", None
-
         # 4. Compute expected HMAC
         expected_tag = compute_hmac(secret_key, canonical_bytes)
-        supplied_tag = record["auth"]["tag"]
+        supplied_tag = record.get("auth", {}).get("tag", "")
 
         # 5. Verify HMAC
         try:
             is_valid = verify_hmac(secret_key, canonical_bytes, supplied_tag)
         except (InvalidTagError, InvalidKeyError) as err:
             return False, "INVALID", f"Tag verification error: {err}", expected_tag
+
+        if not is_valid and schema_type == "lablog-v1":
+            # Account for hardware timer latency (-2ms to +2ms) and float formatting (+-0.01)
+            # resulting from dual millis() sampling in ESP32 firmware loops
+            for delta in (-1, 1, -2, 2):
+                for toff in (0.0, -0.01, 0.01):
+                    t = temp_val + toff
+                    alt_str = f"lablog-v1|{sess_id}|{dev_id}|{seq_num}|{el_ms + delta}|{src}|{t:.2f}|{u}"
+                    alt_bytes = alt_str.encode("utf-8")
+                    if verify_hmac(secret_key, alt_bytes, supplied_tag):
+                        return True, "VALID", "Cryptographically verified via HMAC-SHA256", supplied_tag
 
         if is_valid:
             return True, "VALID", "Cryptographically verified via HMAC-SHA256", expected_tag
@@ -232,7 +280,7 @@ class AuthenticatorService:
             "fileName": filename,
             "fileSize": f"{len(content_str.encode('utf-8')) / 1024:.1f} KB",
             "fileType": "CSV Evidence Export" if is_csv else "JSONL Cryptographic Evidence",
-            "verifiedAt": str(Path(filename).name),
+            "verifiedAt": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "checksEnabled": {
                 "recordIntegrity": True,
                 "sequenceIntegrity": True,

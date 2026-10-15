@@ -1,21 +1,69 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrandingPanel } from './components/BrandingPanel';
 import { LoginCard } from './components/LoginCard';
 import { ForgotPasswordModal } from './components/ForgotPasswordModal';
 import { DashboardView } from './components/DashboardView';
 import { CircuitPattern } from './components/CircuitPattern';
 import { UserSession } from './types';
+import { api } from './services/api';
+import { ShieldCheck, Loader2 } from 'lucide-react';
 
 export default function App() {
   const [session, setSession] = useState<UserSession | null>(null);
   const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState<boolean>(false);
+  const [isRestoringSession, setIsRestoringSession] = useState<boolean>(true);
+
+  // Auto-restore session from active token on initial page load
+  useEffect(() => {
+    const token = localStorage.getItem('lg_session_token');
+    if (!token) {
+      setIsRestoringSession(false);
+      return;
+    }
+
+    api.getMe()
+      .then((user) => {
+        setSession(user);
+      })
+      .catch(() => {
+        localStorage.removeItem('lg_session_token');
+      })
+      .finally(() => {
+        setIsRestoringSession(false);
+      });
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      await api.logout();
+    } catch {}
+    setSession(null);
+  };
+
+  // Loading indicator during initial session verification
+  if (isRestoringSession) {
+    return (
+      <div className="min-h-screen w-full bg-[#EAF9FF] text-[#17324D] flex flex-col items-center justify-center relative">
+        <CircuitPattern />
+        <div className="z-10 flex flex-col items-center gap-3 bg-white p-8 rounded-2xl shadow-lg border border-[#C9EAF7]">
+          <div className="w-12 h-12 rounded-xl bg-[#BDEDFD] flex items-center justify-center text-[#087EE8]">
+            <ShieldCheck className="w-6 h-6 animate-pulse" />
+          </div>
+          <div className="flex items-center gap-2 text-sm font-bold text-[#082F61]">
+            <Loader2 className="w-4 h-4 animate-spin text-[#087EE8]" />
+            <span>Verifying Secure Session...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // If authenticated, display the live telemetry dashboard
   if (session) {
     return (
       <DashboardView
         session={session}
-        onLogout={() => setSession(null)}
+        onLogout={handleLogout}
       />
     );
   }
@@ -57,7 +105,7 @@ export default function App() {
       <ForgotPasswordModal
         isOpen={isForgotPasswordOpen}
         onClose={() => setIsForgotPasswordOpen(false)}
-        initialEmail="telemetry.lead@labguard.io"
+        initialEmail=""
       />
     </div>
   );

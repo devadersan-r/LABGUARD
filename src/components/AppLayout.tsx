@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { TrueguardLogo } from './TrueguardLogo';
 import { UserSession } from '../types';
+import { SerialStatus } from '../services/api';
 
 export type NavTab = 
   | 'dashboard' 
@@ -32,6 +33,9 @@ interface AppLayoutProps {
   headerSubtitle?: string;
   globalSearch?: string;
   onGlobalSearchChange?: (val: string) => void;
+  sessionCount?: number;
+  serialStatus?: SerialStatus | null;
+  isDemoMode?: boolean;
 }
 
 export const AppLayout: React.FC<AppLayoutProps> = ({
@@ -44,6 +48,9 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   headerSubtitle,
   globalSearch = '',
   onGlobalSearchChange,
+  sessionCount = 0,
+  serialStatus = null,
+  isDemoMode = false,
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -124,9 +131,9 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
                 >
                   <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-[#087EE8]' : 'text-[#58758D]'}`} />
                   <span className="truncate">{item.label}</span>
-                  {item.id === 'sessions' && (
+                  {item.id === 'sessions' && sessionCount > 0 && (
                     <span className="ml-auto text-[13px] bg-[#087EE8] text-white px-2 py-0.5 rounded-md font-mono-telemetry font-bold">
-                      12
+                      {sessionCount}
                     </span>
                   )}
                 </button>
@@ -135,17 +142,35 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           </nav>
         </div>
 
-        {/* Sidebar Footer: Hardware Enclave Status */}
+        {/* Sidebar Footer: Hardware Enclave Status Derived from Real Serial Connection */}
         <div className="p-4 m-3 rounded-xl bg-[#F4FBFF] border border-[#C9EAF7] text-xs space-y-1.5">
-          <div className="flex items-center justify-between text-[14px] text-[#087EE8]">
+          <div className="flex items-center justify-between text-[14px]">
             <span className="flex items-center gap-1.5 font-bold text-[#082F61]">
-              <span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse" />
-              ESP32 RIG #1
+              <span className={`w-2 h-2 rounded-full ${
+                serialStatus?.connected 
+                  ? 'bg-[#10B981] animate-pulse' 
+                  : serialStatus?.simulatorActive 
+                  ? 'bg-[#087EE8] animate-pulse' 
+                  : 'bg-slate-400'
+              }`} />
+              {serialStatus?.simulatorActive ? 'SIMULATOR RIG' : 'ESP32 RIG #1'}
             </span>
-            <span className="font-bold text-[#10B981]">ONLINE</span>
+            <span className={`font-bold ${
+              serialStatus?.connected 
+                ? 'text-[#10B981]' 
+                : serialStatus?.simulatorActive 
+                ? 'text-[#087EE8]' 
+                : 'text-slate-500'
+            }`}>
+              {serialStatus?.connected ? 'ONLINE' : serialStatus?.simulatorActive ? 'SIMULATED' : 'DISCONNECTED'}
+            </span>
           </div>
           <div className="text-[14px] text-[#58758D] font-mono-telemetry truncate">
-            FW: LABGUARD-v2.4
+            {serialStatus?.connected 
+              ? `Port: ${serialStatus.port} @ ${serialStatus.baudRate}` 
+              : serialStatus?.simulatorActive 
+              ? 'Mode: Synthetic DS18B20' 
+              : 'USB Serial: Not connected'}
           </div>
         </div>
       </aside>
@@ -174,7 +199,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
             </div>
           </div>
 
-          {/* Right: Search, Demo Mode Badge, User Profile: Team Student, Sign Out */}
+          {/* Right: Search, Demo Mode Badge (conditional), User Profile, Sign Out */}
           <div className="flex items-center gap-3 shrink-0">
             {/* Search field */}
             <div className="hidden lg:flex items-center relative w-48 xl:w-56">
@@ -188,11 +213,13 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
               />
             </div>
 
-            {/* Demo Mode Badge in Light Blue Theme */}
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[14px] font-bold bg-[#BDEDFD] text-[#082F61] border border-[#A5E3FA] shrink-0">
-              <span className="w-2 h-2 rounded-full bg-[#087EE8] animate-pulse" />
-              <span>Demo Mode</span>
-            </div>
+            {/* Demo Mode Badge in Light Blue Theme - Only shown when deliberately active */}
+            {(isDemoMode || serialStatus?.simulatorActive) && (
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[14px] font-bold bg-[#BDEDFD] text-[#082F61] border border-[#A5E3FA] shrink-0">
+                <span className="w-2 h-2 rounded-full bg-[#087EE8] animate-pulse" />
+                <span>Bench Simulator Mode</span>
+              </div>
+            )}
 
             {/* User Profile: Team Student */}
             <div className="flex items-center gap-2.5 pl-2 border-l border-[#C9EAF7]">

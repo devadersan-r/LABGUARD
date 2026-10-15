@@ -94,14 +94,15 @@ export const TelemetryGraph: React.FC<TelemetryGraphProps> = ({
     return `${throughputPath} L ${endX.toFixed(1)} ${bottomY} L ${startX.toFixed(1)} ${bottomY} Z`;
   }, [throughputPath, data.length]);
 
-  // Summary Metrics
-  const latestPoint = data[data.length - 1] || { viability: 99.98, throughput: 55, hmac: '0000' };
-  const avgViability = (
-    data.reduce((acc, p) => acc + p.viability, 0) / (data.length || 1)
-  ).toFixed(2);
-  const avgThroughput = Math.round(
-    data.reduce((acc, p) => acc + p.throughput, 0) / (data.length || 1)
-  );
+  // Summary Metrics — calculated accurately without fake fallbacks
+  const hasData = data.length > 0;
+  const latestPoint = hasData ? data[data.length - 1] : null;
+  const avgViability = hasData
+    ? (data.reduce((acc, p) => acc + p.viability, 0) / data.length).toFixed(2)
+    : null;
+  const avgThroughput = hasData
+    ? Math.round(data.reduce((acc, p) => acc + p.throughput, 0) / data.length)
+    : 0;
 
   return (
     <div className="bg-white rounded-2xl p-5 sm:p-6 shadow-md border border-[#C9EAF7] text-[#17324D] space-y-4">
@@ -115,10 +116,14 @@ export const TelemetryGraph: React.FC<TelemetryGraphProps> = ({
             <div className="flex items-center gap-2">
               <h3 className="text-base font-bold text-[#082F61] flex items-center gap-2">
                 Live Record Viability & Ingest Telemetry
-                {isLive && (
+                {hasData && isLive ? (
                   <span className="flex items-center gap-1 text-[14px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    100% VIABLE STREAM
+                    LIVE VERIFIED STREAM
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-[14px] font-semibold text-slate-600 bg-slate-100 border border-slate-300 px-2.5 py-0.5 rounded-full">
+                    STREAM STANDBY
                   </span>
                 )}
               </h3>
@@ -189,25 +194,40 @@ export const TelemetryGraph: React.FC<TelemetryGraphProps> = ({
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 py-3 border-b border-[#C9EAF7] text-xs">
         <div className="p-2.5 rounded-xl bg-[#F4FBFF] border border-[#C9EAF7]">
           <span className="text-[14px] text-[#58758D] block font-medium">CURRENT RECORD VIABILITY</span>
-          <span className="text-base font-bold font-mono-telemetry text-[#087EE8]">{latestPoint.viability.toFixed(2)} %</span>
-          <span className="text-[13px] text-emerald-700 block flex items-center gap-1 font-semibold">
-            <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Zero Bitrot / Optimal
+          <span className="text-base font-bold font-mono-telemetry text-[#087EE8]">
+            {hasData && latestPoint ? `${latestPoint.viability.toFixed(2)} %` : <span className="text-slate-400 font-normal">null</span>}
+          </span>
+          <span className={`text-[13px] block flex items-center gap-1 font-semibold ${hasData ? 'text-emerald-700' : 'text-slate-500'}`}>
+            <CheckCircle2 className={`w-3 h-3 ${hasData ? 'text-emerald-600' : 'text-slate-400'}`} />
+            {hasData ? 'Zero Bitrot / Optimal' : 'Awaiting Ingress'}
           </span>
         </div>
         <div className="p-2.5 rounded-xl bg-[#F4FBFF] border border-[#C9EAF7]">
           <span className="text-[14px] text-[#58758D] block font-medium">AVERAGE VIABILITY (1H)</span>
-          <span className="text-base font-bold font-mono-telemetry text-[#082F61]">{avgViability} %</span>
-          <span className="text-[13px] text-[#58758D] block">Target: &gt;99.95%</span>
+          <span className="text-base font-bold font-mono-telemetry text-[#082F61]">
+            {hasData && avgViability !== null ? `${avgViability} %` : <span className="text-slate-400 font-normal">null</span>}
+          </span>
+          <span className="text-[13px] text-[#58758D] block">
+            {hasData ? 'Target: >99.95%' : 'No records recorded'}
+          </span>
         </div>
         <div className="p-2.5 rounded-xl bg-[#F4FBFF] border border-[#C9EAF7]">
           <span className="text-[14px] text-[#58758D] block font-medium">VERIFIED INGEST RATE</span>
-          <span className="text-base font-bold font-mono-telemetry text-[#082F61]">{latestPoint.throughput} rec/s</span>
-          <span className="text-[13px] text-[#58758D] block">Mean: {avgThroughput} rec/s</span>
+          <span className="text-base font-bold font-mono-telemetry text-[#082F61]">
+            {hasData && latestPoint ? `${latestPoint.throughput} rec/s` : <span className="text-slate-400 font-normal">0 rec/s</span>}
+          </span>
+          <span className="text-[13px] text-[#58758D] block">
+            Mean: {hasData ? `${avgThroughput} rec/s` : '0 rec/s'}
+          </span>
         </div>
         <div className="p-2.5 rounded-xl bg-[#F4FBFF] border border-[#C9EAF7]">
           <span className="text-[14px] text-[#58758D] block font-medium">CRYPTOGRAPHIC INTEGRITY</span>
-          <span className="text-base font-bold text-emerald-700">100% INTACT</span>
-          <span className="text-[13px] text-[#58758D] block font-mono-telemetry">HMAC-SHA256 Valid</span>
+          <span className={`text-base font-bold ${hasData ? 'text-emerald-700' : 'text-slate-400 font-normal font-mono-telemetry'}`}>
+            {hasData ? '100% INTACT' : 'null'}
+          </span>
+          <span className="text-[13px] text-[#58758D] block font-mono-telemetry">
+            {hasData ? 'HMAC-SHA256 Valid' : 'Awaiting Ingress'}
+          </span>
         </div>
       </div>
 
@@ -384,6 +404,18 @@ export const TelemetryGraph: React.FC<TelemetryGraphProps> = ({
             )}
           </svg>
         </div>
+
+        {!hasData && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-white/80 backdrop-blur-[1px]">
+            <div className="w-10 h-10 rounded-xl bg-[#F4FBFF] border border-[#C9EAF7] flex items-center justify-center text-[#087EE8] mb-2 shadow-xs">
+              <Activity className="w-5 h-5 text-[#58758D]" />
+            </div>
+            <p className="text-xs font-bold text-[#082F61]">No Live Telemetry Records</p>
+            <p className="text-[11px] text-[#58758D] max-w-sm mt-0.5">
+              Zero records recorded. Connect ESP32 serial port or start the bench simulator to begin streaming cryptographically verified telemetry.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Footer Legend Strip */}

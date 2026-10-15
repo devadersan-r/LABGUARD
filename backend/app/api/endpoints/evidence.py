@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 from typing import List, Optional
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from backend.app.database import get_db
@@ -79,6 +79,30 @@ def get_sample_evidence_file(sample_type: str):
     content = path.read_text(encoding="utf-8")
     report = authenticator_service.verify_uploaded_file(content, filename)
     return report
+
+@router.get("/sample/{sample_type}/download")
+def download_sample_evidence_file(sample_type: str):
+    """Download the raw sample JSONL evidence file for testing or local tampering demonstration."""
+    evidence_dir = WORKSPACE_DIR / "LABGUARD" / "evidence"
+
+    if sample_type == "clean":
+        path = evidence_dir / "demo_valid.jsonl"
+        filename = "LABGUARD_Clean_Export_2026.jsonl"
+    elif sample_type == "tampered":
+        path = evidence_dir / "demo_tampered.jsonl"
+        filename = "LABGUARD_Tampered_Test_Export.jsonl"
+    else:
+        raise HTTPException(status_code=400, detail="Invalid sample type. Choose 'clean' or 'tampered'")
+
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Sample evidence file not found")
+
+    content = path.read_text(encoding="utf-8")
+    return Response(
+        content=content,
+        media_type="application/x-ndjson",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 @router.get("/reports", response_model=List[VerificationReportOut])
 def get_verification_reports(db: Session = Depends(get_db)):

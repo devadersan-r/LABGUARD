@@ -4,7 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --port=3000 --host=0.0.0.0",
+    "dev": "node scripts/dev.js",
+    "dev:frontend": "vite --port=3000 --host=0.0.0.0",
+    "dev:backend": ".\\.venv\\Scripts\\python.exe -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
